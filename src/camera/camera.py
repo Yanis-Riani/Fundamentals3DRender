@@ -24,7 +24,19 @@ class Camera:
         self.position = vecteur3.Vecteur(x, y, z)
 
     def get_view_matrix(self) -> matrix.Matrix4:
-        return matrix.Matrix4.look_at(self.position, self.target, self.up)
+        # Flip the up vector when looking downward (elevation < -90° or > 90°)
+        # Normalize elevation to [-pi, pi] range
+        normalized_elevation = self.elevation % (2 * math.pi)
+        if normalized_elevation > math.pi:
+            normalized_elevation -= 2 * math.pi
+
+        # Flip up vector when upside down
+        if normalized_elevation < -math.pi/2 or normalized_elevation > math.pi/2:
+            up_vector = vecteur3.Vecteur(0.0, -1.0, 0.0)
+        else:
+            up_vector = self.up
+
+        return matrix.Matrix4.look_at(self.position, self.target, up_vector)
 
     def rotate(self, dx: float, dy: float) -> None:
         sensitivity = 0.02
