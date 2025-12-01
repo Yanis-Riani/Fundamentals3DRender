@@ -37,6 +37,10 @@ class Vecteur():
         vres.vz = self.vx * v.vy - self.vy * v.vx
         return vres
 
+    def __neg__(self) -> Vecteur:
+        """Returns the negation of the vector."""
+        return Vecteur(-self.vx, -self.vy, -self.vz)
+
     def __rmul__(self, k: float) -> Vecteur:
         vres = Vecteur()
         vres.vx = self.vx * k

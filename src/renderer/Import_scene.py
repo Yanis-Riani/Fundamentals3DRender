@@ -3,11 +3,24 @@ from typing import List, Tuple, Any
 import os
 import tkinter.filedialog
 from PIL import Image
+from . import vecteur3
 
 ASSETS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "assets")
 
 
 class Polyedre():
+    def get_center(self) -> vecteur3.Vecteur:
+        """Calculates the geometric center of the object's vertices."""
+        if not self.listesommets:
+            return vecteur3.Vecteur(0, 0, 0)
+        
+        sum_x = sum(v[0] for v in self.listesommets)
+        sum_y = sum(v[1] for v in self.listesommets)
+        sum_z = sum(v[2] for v in self.listesommets)
+        
+        num_vertices = len(self.listesommets)
+        return vecteur3.Vecteur(sum_x / num_vertices, sum_y / num_vertices, sum_z / num_vertices)
+
     def __init__(self) -> None:
         self.nomobj: str = ""
         self.listesommets: List[List[float]] = []

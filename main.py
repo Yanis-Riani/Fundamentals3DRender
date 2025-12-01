@@ -1,4 +1,4 @@
-from renderer.Vue import VueCourbes
+from src.renderer.Vue import VueCourbes
 
 if __name__ == "__main__":
     # cree la vue
