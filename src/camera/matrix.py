@@ -42,6 +42,55 @@ class Matrix4:
 
         return vecteur3.Vecteur(x, y, z)
 
+        return vecteur3.Vecteur(x, y, z)
+
+    def transpose(self) -> Matrix4:
+        result = Matrix4()
+        for i in range(3): # Only transpose the 3x3 rotation part
+            for j in range(3):
+                result.mat[i][j] = self.mat[j][i]
+        
+        # Preserve translation and w component
+        result.mat[3][0] = self.mat[3][0]
+        result.mat[3][1] = self.mat[3][1]
+        result.mat[3][2] = self.mat[3][2]
+        result.mat[3][3] = self.mat[3][3] 
+        return result
+
+    def inverse(self) -> Matrix4:
+        # Assuming the matrix is an affine transformation matrix (rotation and translation)
+        # M = [ R | t ]
+        #     [ 0 | 1 ]
+        # M_inv = [ R^T | -R^T * t ]
+        #         [ 0   | 1        ]
+        
+        result = Matrix4()
+        # Transpose the 3x3 rotation part (R^T)
+        for i in range(3):
+            for j in range(3):
+                result.mat[i][j] = self.mat[j][i]
+        
+        # Calculate -R^T * t
+        t_vec = vecteur3.Vecteur(self.mat[3][0], self.mat[3][1], self.mat[3][2])
+        
+        # Apply R^T to -t
+        # This is equivalent to multiplying the transposed rotation part by the negative translation vector
+        inv_t_x = -(result.mat[0][0] * t_vec.vx + result.mat[1][0] * t_vec.vy + result.mat[2][0] * t_vec.vz)
+        inv_t_y = -(result.mat[0][1] * t_vec.vx + result.mat[1][1] * t_vec.vy + result.mat[2][1] * t_vec.vz)
+        inv_t_z = -(result.mat[0][2] * t_vec.vx + result.mat[1][2] * t_vec.vy + result.mat[2][2] * t_vec.vz)
+
+        result.mat[3][0] = inv_t_x
+        result.mat[3][1] = inv_t_y
+        result.mat[3][2] = inv_t_z
+        result.mat[3][3] = 1.0 # The w component remains 1
+
+        # Fill the bottom row with 0s except for the last element
+        result.mat[0][3] = 0.0
+        result.mat[1][3] = 0.0
+        result.mat[2][3] = 0.0
+        
+        return result
+
     @staticmethod
     def look_at(eye: vecteur3.Vecteur, target: vecteur3.Vecteur, up: vecteur3.Vecteur) -> Matrix4:
         zaxis = (target - eye).normer()
