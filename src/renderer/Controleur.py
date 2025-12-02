@@ -99,8 +99,11 @@ class ControleurCourbes(object):
 
     def _deplacerSommet(self, obj_idx: int, vertex_idx: int, new_2d_pos: Point2D) -> None:
         """ Deplace un sommet selectionne en mode edition. """
-        if self.scene is None or not self.loaded_objects:
+        if self.scene is None or not self.loaded_objects or self.vue_ref is None:
             return
+
+        larg = self.vue_ref.largeur
+        haut = self.vue_ref.hauteur
 
         # Get the original Polyedre object and the vertex to move
         polyedre = self.loaded_objects[obj_idx][0]
