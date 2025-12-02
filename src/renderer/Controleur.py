@@ -122,11 +122,11 @@ class ControleurCourbes(object):
 
         # Convert screen coordinates to relative coordinates for inverse projection
         # This undoes the (larg // 2 + x, (haut + 1) // 2 - 1 - y) transformation
-        screen_x_old = old_2d_pos[0] - self.largeur // 2
-        screen_y_old = (self.hauteur + 1) // 2 - 1 - old_2d_pos[1]
+        screen_x_old = old_2d_pos[0] - larg // 2
+        screen_y_old = (haut + 1) // 2 - 1 - old_2d_pos[1]
         
-        screen_x_new = new_2d_pos[0] - self.largeur // 2
-        screen_y_new = (self.hauteur + 1) // 2 - 1 - new_2d_pos[1]
+        screen_x_new = new_2d_pos[0] - larg // 2
+        screen_y_new = (haut + 1) // 2 - 1 - new_2d_pos[1]
 
         # Calculate the 2D delta in these relative coordinates
         delta_x_2d = screen_x_new - screen_x_old
@@ -318,9 +318,7 @@ class ControleurCourbes(object):
         if hasattr(self, 'vue_ref') and self.vue_ref:
             self.rebuild_courbes(self.vue_ref.largeur, self.vue_ref.hauteur)
             self.vue_ref.majAffichage()
-        else:
-            # Fallback for debugging, if vue_ref isn't set
-            self.rebuild_courbes(self.largeur, self.hauteur) # Need to know current canvas size.
+
 
 
 
