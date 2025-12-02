@@ -3,7 +3,7 @@ import os
 ASSETS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "assets")
 
 import tkinter.filedialog
-from typing import Any, Callable, List, Tuple
+from typing import Any, Callable, List, Tuple, Optional
 
 from ..camera import camera, matrix
 from . import Import_scene, Modele, vecteur3
@@ -166,10 +166,126 @@ class ControleurCourbes(object):
         self.rebuild_courbes(larg, haut)
         self.vue_ref.majAffichage()
 
-    def rebuild_courbes(self, larg: int, haut: int) -> None:
-        """Rebuilds the list of courbes using the current rendering mode."""
-        self.set_rendering_mode(larg, haut, self.current_rendering_mode)
+
+    def set_rendering_mode(self, larg: int, haut: int, mode: str) -> None:
+        """Generates the courbes list for rendering based on loaded objects and selected mode."""
+        self.current_rendering_mode = mode # Update the current rendering mode
+        self.courbes = []  # Clear existing courbes for new rendering mode
+        if self.scene is None: # self.scene must be set for object to be loaded
+            return
+
+        # Ensure zbuffer is initialized for zbuffer mode, or reset for other modes
+        if mode == 'zbuffer':
+            if self.zbuffer is None:
+                self.zbuffer = Modele.ZBuffer()
+            self.zbuffer.alloc_init_zbuffer(larg, haut)
+        else:
+            self.zbuffer = None # Clear zbuffer for non-zbuffer modes
+
+        d = self.scene.d
+        view_matrix = self.camera.get_view_matrix()
+
+        self.transformed_vertices_3d = []  # Clear global list
+        self.projected_vertices_2d = []  # Clear global list
+        self.courbes = []  # Clear existing courbes for new rendering mode
+
+        if self.scene is None: # self.scene must be set for object to be loaded
+            return
+
+        # Ensure zbuffer is initialized for zbuffer mode, or or reset for other modes
+        if mode == 'zbuffer':
+            if self.zbuffer is None:
+                self.zbuffer = Modele.ZBuffer()
+            self.zbuffer.alloc_init_zbuffer(larg, haut)
+        else:
+            self.zbuffer = None # Clear zbuffer for non-zbuffer modes
+
+        d = self.scene.d
+        view_matrix = self.camera.get_view_matrix()
+
+        # Populate global transformed and projected vertex lists once for all objects
+        for indcptobj_stored, (obj, obj_texture) in enumerate(self.loaded_objects):
+            # Recalculate transformations for each object
+            center = obj.get_center()
+            center_translation = matrix.Matrix4.create_translation(vecteur3.Vecteur(-center.vx, -center.vy, -center.vz))
+            transform_matrix = center_translation * view_matrix
+
+            for som_coords in obj.listesommets:
+                v = vecteur3.Vecteur(som_coords[0], som_coords[1], som_coords[2])
+                v_transformed = transform_matrix.transform_point(v)
+                self.transformed_vertices_3d.append(v_transformed) # Store as Vecteur
+
+                # Project to 2D
+                if v_transformed.vz == 0:
+                    # Handle division by zero, possibly by clipping or placing far away
+                    xp_2d = 0
+                    yp_2d = 0
+                else:
+                    xp_2d = round(v_transformed.vx * d / v_transformed.vz)
+                    yp_2d = round(v_transformed.vy * d / v_transformed.vz)
+                self.projected_vertices_2d.append((larg // 2 + xp_2d, (haut + 1) // 2 - 1 - yp_2d)) # Store as Point2D
+
+            # Iterate through faces and create RenderedTriangle instances
+            # All modes will now use RenderedTriangle for consistent data access
+            for i, _ in enumerate(obj.listeindicestriangle):
+                if mode == 'fildefer':
+                    # For wireframe, we still need lines. RenderedTriangle can draw a filled triangle,
+                    # so we will use its vertex data to draw lines *around* it.
+                    # This is a simplification; a proper wireframe might iterate edges.
+                    # For now, we use the 3 vertices of the face to draw 3 lines.
+                    v_indices = obj.listeindicestriangle[i]
+                    p0_idx, p1_idx, p2_idx = v_indices[0] - 1, v_indices[1] - 1, v_indices[2] - 1
+
+                    point0 = self.projected_vertices_2d[p0_idx]
+                    point1 = self.projected_vertices_2d[p1_idx]
+                    point2 = self.projected_vertices_2d[p2_idx]
+
+                    droitemilieu1 = Modele.DroiteMilieu()
+                    self.ajouterCourbe(droitemilieu1)
+                    droitemilieu1.ajouterControle(point0)
+                    droitemilieu1.ajouterControle(point1)
+
+                    droitemilieu2 = Modele.DroiteMilieu()
+                    self.ajouterCourbe(droitemilieu2)
+                    droitemilieu2.ajouterControle(point1)
+                    droitemilieu2.ajouterControle(point2)
+
+                    droitemilieu3 = Modele.DroiteMilieu()
+                    self.ajouterCourbe(droitemilieu3)
+                    droitemilieu3.ajouterControle(point2)
+                    droitemilieu3.ajouterControle(point0)
+
+                elif mode == 'peintre':
+                    # For painter's algorithm, RenderedTriangle will act as the filled primitive
+                    # We might need to sort these triangles later based on depth for actual painter's.
+                    if self.zbuffer is None: # peintre mode does not use zbuffer normally
+                        rendered_triangle = Modele.RenderedTriangle(obj, i, self.transformed_vertices_3d, self.projected_vertices_2d, self.scene, self.zbuffer)
+                        self.ajouterCourbe(rendered_triangle)
+                elif mode == 'zbuffer':
+                    # Z-buffer mode directly uses RenderedTriangle
+                    if self.zbuffer is not None:
+                        rendered_triangle = Modele.RenderedTriangle(obj, i, self.transformed_vertices_3d, self.projected_vertices_2d, self.scene, self.zbuffer)
+                        self.ajouterCourbe(rendered_triangle)
 
     def rebuild_courbes(self, larg: int, haut: int) -> None:
         """Rebuilds the list of courbes using the current rendering mode."""
         self.set_rendering_mode(larg, haut, self.current_rendering_mode)
+
+    def importer_objet(self, larg: int, haut: int) -> None:
+        """Imports an object and displays it in a default rendering mode."""
+        # Initialize self.scene with scene data
+        donnees = Import_scene.Donnees_scene(os.path.join(ASSETS_DIR, "scenes", "Donnees_scene.sce"))
+        self.scene = donnees
+
+        fic = tkinter.filedialog.askopenfilename(title="Inserer l objet:", initialdir=os.path.join(ASSETS_DIR, "scenes"),
+                                              filetypes=[("Fichiers Objets", "*.obj")])
+        if len(fic) > 0:
+            indcptobj = 0 # Assuming only one object is loaded at a time into the scene's listeobjets
+            obj_texture = donnees.ajoute_objet(fic, indcptobj)
+
+            # Store a reference to this loaded object and its texture status
+            self.loaded_objects = [(self.scene.listeobjets[indcptobj], obj_texture)] # Overwrite for single object mode
+
+            # Render in a default mode (wireframe)
+            self.current_rendering_mode = 'fildefer' # Set default mode
+            self.rebuild_courbes(larg, haut)
