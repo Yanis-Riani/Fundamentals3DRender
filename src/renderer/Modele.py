@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import List, Tuple, Callable, Any
+from typing import List, Tuple, Callable, Any, Optional
 
 from . import AArete
 from . import vecteur3
@@ -264,7 +264,8 @@ class RenderedTriangle(Courbe):
                  transformed_vertices_3d: List[vecteur3.Vecteur],
                  projected_vertices_2d: List[Point2D],
                  scene_ref: Donnees_scene,
-                 zbuffer_ref: ZBuffer) -> None:
+                 zbuffer_ref: Optional[ZBuffer], # Made optional
+                 larg: int, haut: int) -> None: # Added larg and haut
         super().__init__()
         self.polyedre = polyedre_ref
         self.triangle_face_index = triangle_face_index
@@ -272,6 +273,8 @@ class RenderedTriangle(Courbe):
         self.projected_vertices_2d = projected_vertices_2d
         self.scene = scene_ref
         self.zbuffer = zbuffer_ref
+        self.larg = larg # Store canvas width
+        self.haut = haut # Store canvas height
 
         # Get the actual face data from the Polyedre using triangle_face_index
         self.vertex_indices = self.polyedre.listeindicestriangle[self.triangle_face_index]
@@ -339,12 +342,10 @@ class RenderedTriangle(Courbe):
         p3d = self.transformed_vertices_3d[v_idx_0based]
 
         # Get normal (in camera space)
-        # Use try-except for robustness if normal_indices is empty or invalid
         normal_data = self.polyedre.listenormales[n_idx_0based] if self.polyedre.listenormales and 0 <= n_idx_0based < len(self.polyedre.listenormales) else [0.0, 0.0, 0.0]
         normal = vecteur3.Vecteur(normal_data[0], normal_data[1], normal_data[2])
 
         # Get texture coordinate
-        # Use try-except for robustness if texture_indices is empty or invalid
         tex_coord = self.polyedre.listecoordtextures[t_idx_0based] if self.polyedre.listecoordtextures and 0 <= t_idx_0based < len(self.polyedre.listecoordtextures) else (0.0, 0.0)
 
         return p2d, p3d, normal, tex_coord
@@ -632,8 +633,6 @@ class RenderedTriangle(Courbe):
         D = -(A * v0_3d.x + B * v0_3d.y + C * v0_3d.z)
 
         self.facette_properties.normaleetplan = [A, B, C, D]
-        # Rest of the scanline rasterization logic, adapted to use references
-        # from projected_vertices_2d and transformed_vertices_3d
         
         Pmin_x = round(p_min_2d[0])
         Pmin_y = round(p_min_2d[1])
@@ -671,14 +670,17 @@ class RenderedTriangle(Courbe):
                     if (A * x + B * y + C * d) == 0: continue # Avoid division by zero
                     t = -D / (A * x + B * y + C * d)
                     M3D = (t * x, t * y, t * d)
-                    
-                    posx = self.zbuffer.dimx // 2 + x
-                    posy = (self.zbuffer.dimy + 1) // 2 - 1 - y
+                    coul = self.calculercouleur(M3D, self.scene)
 
-                    if 0 <= posx < self.zbuffer.dimx and 0 <= posy < self.zbuffer.dimy:
-                        if (M3D[2] > 0 and M3D[2] < self.zbuffer.acces(posx, posy)):
-                            self.zbuffer.modif(posx, posy, M3D[2])
-                            coul = self.calculercouleur(M3D, self.scene)
+                    posx = self.larg // 2 + x
+                    posy = (self.haut + 1) // 2 - 1 - y
+
+                    if 0 <= posx < self.larg and 0 <= posy < self.haut:
+                        if self.zbuffer is not None: # Only perform Z-buffering if zbuffer is provided
+                            if (M3D[2] > 0 and M3D[2] < self.zbuffer.acces(posx, posy)):
+                                self.zbuffer.modif(posx, posy, M3D[2])
+                                dessinerPoint((posx, posy), coul)
+                        else: # No Z-buffer, just draw
                             dessinerPoint((posx, posy), coul)
                 edgeG.maj()
                 edgeD.maj()
@@ -694,12 +696,16 @@ class RenderedTriangle(Courbe):
                     if (A * x + B * y + C * d) == 0: continue
                     t = -D / (A * x + B * y + C * d)
                     M3D = (t * x, t * y, t * d)
-                    posx = self.zbuffer.dimx // 2 + x
-                    posy = (self.zbuffer.dimy + 1) // 2 - 1 - y
-                    if 0 <= posx < self.zbuffer.dimx and 0 <= posy < self.zbuffer.dimy:
-                        if (M3D[2] > 0 and M3D[2] < self.zbuffer.acces(posx, posy)):
-                            self.zbuffer.modif(posx, posy, M3D[2])
-                            coul = self.calculercouleur(M3D, self.scene)
+                    coul = self.calculercouleur(M3D, self.scene)
+
+                    posx = self.larg // 2 + x
+                    posy = (self.haut + 1) // 2 - 1 - y
+                    if 0 <= posx < self.larg and 0 <= posy < self.haut:
+                        if self.zbuffer is not None: # Only perform Z-buffering if zbuffer is provided
+                            if (M3D[2] > 0 and M3D[2] < self.zbuffer.acces(posx, posy)):
+                                self.zbuffer.modif(posx, posy, M3D[2])
+                                dessinerPoint((posx, posy), coul)
+                        else: # No Z-buffer, just draw
                             dessinerPoint((posx, posy), coul)
                 edgeG.maj()
                 edgeD.maj()
@@ -725,12 +731,16 @@ class RenderedTriangle(Courbe):
                     if (A * x + B * y + C * d) == 0: continue
                     t = -D / (A * x + B * y + C * d)
                     M3D = (t * x, t * y, t * d)
-                    posx = self.zbuffer.dimx // 2 + x
-                    posy = (self.zbuffer.dimy + 1) // 2 - 1 - y
-                    if 0 <= posx < self.zbuffer.dimx and 0 <= posy < self.zbuffer.dimy:
-                        if (M3D[2] > 0 and M3D[2] < self.zbuffer.acces(posx, posy)):
-                            self.zbuffer.modif(posx, posy, M3D[2])
-                            coul = self.calculercouleur(M3D, self.scene)
+                    coul = self.calculercouleur(M3D, self.scene)
+
+                    posx = self.larg // 2 + x
+                    posy = (self.haut + 1) // 2 - 1 - y
+                    if 0 <= posx < self.larg and 0 <= posy < self.haut:
+                        if self.zbuffer is not None: # Only perform Z-buffering if zbuffer is provided
+                            if (M3D[2] > 0 and M3D[2] < self.zbuffer.acces(posx, posy)):
+                                self.zbuffer.modif(posx, posy, M3D[2])
+                                dessinerPoint((posx, posy), coul)
+                        else: # No Z-buffer, just draw
                             dessinerPoint((posx, posy), coul)
                 edgeG.maj()
                 edgeD.maj()
@@ -746,12 +756,16 @@ class RenderedTriangle(Courbe):
                     if (A * x + B * y + C * d) == 0: continue
                     t = -D / (A * x + B * y + C * d)
                     M3D = (t * x, t * y, t * d)
-                    posx = self.zbuffer.dimx // 2 + x
-                    posy = (self.zbuffer.dimy + 1) // 2 - 1 - y
-                    if 0 <= posx < self.zbuffer.dimx and 0 <= posy < self.zbuffer.dimy:
-                        if (M3D[2] > 0 and M3D[2] < self.zbuffer.acces(posx, posy)):
-                            self.zbuffer.modif(posx, posy, M3D[2])
-                            coul = self.calculercouleur(M3D, self.scene)
+                    coul = self.calculercouleur(M3D, self.scene)
+
+                    posx = self.larg // 2 + x
+                    posy = (self.haut + 1) // 2 - 1 - y
+                    if 0 <= posx < self.larg and 0 <= posy < self.haut:
+                        if self.zbuffer is not None: # Only perform Z-buffering if zbuffer is provided
+                            if (M3D[2] > 0 and M3D[2] < self.zbuffer.acces(posx, posy)):
+                                self.zbuffer.modif(posx, posy, M3D[2])
+                                dessinerPoint((posx, posy), coul)
+                        else: # No Z-buffer, just draw
                             dessinerPoint((posx, posy), coul)
                 edgeG.maj()
                 edgeD.maj()
