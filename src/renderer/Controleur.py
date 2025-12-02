@@ -258,9 +258,9 @@ class ControleurCourbes(object):
                 elif mode == 'peintre':
                     # For painter's algorithm, RenderedTriangle will act as the filled primitive
                     # We might need to sort these triangles later based on depth for actual painter's.
-                    if self.zbuffer is None: # peintre mode does not use zbuffer normally
-                        rendered_triangle = Modele.RenderedTriangle(obj, i, self.transformed_vertices_3d, self.projected_vertices_2d, self.scene, self.zbuffer)
-                        self.ajouterCourbe(rendered_triangle)
+                    # Pass None for zbuffer_ref to indicate painter's mode
+                    rendered_triangle = Modele.RenderedTriangle(obj, i, self.transformed_vertices_3d, self.projected_vertices_2d, self.scene, None)
+                    self.ajouterCourbe(rendered_triangle)
                 elif mode == 'zbuffer':
                     # Z-buffer mode directly uses RenderedTriangle
                     if self.zbuffer is not None:
