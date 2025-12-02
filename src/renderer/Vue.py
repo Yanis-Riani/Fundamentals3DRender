@@ -18,7 +18,7 @@ AddControlCallable = Callable[[Point2D], None]
 class VueCourbes(object):
     """ Gere l'affichage et la manipulation de courbe avec la bibliotheque Tkinter. """
     def __init__(self, largeur: int, hauteur: int) -> None:
-        self.controleur: Controleur.ControleurCourbes = Controleur.ControleurCourbes()
+        self.controleur: Controleur.ControleurCourbes = Controleur.ControleurCourbes(self)
         self.largeur: int = largeur
         self.hauteur: int = hauteur
         self.canvas: Optional[tkinter.Canvas] = None
@@ -34,7 +34,7 @@ class VueCourbes(object):
         """ Bouton gauche : utilise l'outils courant. """
         if not self.outilsCourant:
             # Type ignore because selectionnerControle can return None
-            self.outilsDeplacer = self.controleur.selectionnerControle((event.x, event.y)) # type: ignore
+            self.outilsDeplacer = self.controleur.selectionnerControle((event.x, event.y), self.controleur.mode) # type: ignore
 
     def callbackB1Motion(self, event: tkinter.Event) -> None:
         if self.outilsDeplacer:
@@ -92,10 +92,20 @@ class VueCourbes(object):
         self.controleur.zoom_camera(event.delta)
         self.majAffichage()
 
+    def callbackToggleMode(self, event: tkinter.Event) -> None:
+        """Toggles between 'viewer' and 'edit' mode."""
+        if self.controleur.mode == 'viewer':
+            self.controleur.mode = 'edit'
+            print("Switched to Edit Mode")
+        else:
+            self.controleur.mode = 'viewer'
+            print("Switched to Viewer Mode")
+        self.majAffichage()
+
 
     def callbackNouveau(self) -> None:
         """ Supprime toutes les courbes. """
-        self.controleur = Controleur.ControleurCourbes()
+        self.controleur = Controleur.ControleurCourbes(self)
         self.majAffichage()
 
     def callbackHorizontale(self) -> None:
@@ -114,14 +124,12 @@ class VueCourbes(object):
         """ Initialise l'outils courant pour ajouter une nouvelle verticale. """
         self.outilsCourant = self.controleur.nouvellePointMilieu()
 
-    def callbackTriangleRempli(self) -> None:
-        """ Initialise l'outils courant pour ajouter un triangle rempli. """
-        self.outilsCourant = self.controleur.nouveauTriangleRempli()
+
 
     def callback_importer(self) -> None:
         """Callback for the 'Importer Objet...' menu item."""
         # Reset controller for new import
-        self.controleur = Controleur.ControleurCourbes()
+        self.controleur = Controleur.ControleurCourbes(self)
         self.controleur.importer_objet(self.largeur, self.hauteur)
         self.majAffichage()
 
@@ -148,6 +156,20 @@ class VueCourbes(object):
             fonctionPoint: DrawPointCallable = lambda p, c: self.imageDraw.point(p, c)  # p le point, c la couleur
             fonctionControle: DrawControlCallable = lambda p: self.imageDraw.rectangle([p[0] - 2, p[1] - 2, p[0] + 2, p[1] + 2], fill='blue')
             self.controleur.dessiner(fonctionControle, fonctionPoint)
+
+            # Highlight selected vertex if in 'edit' mode and a vertex is selected
+            if self.controleur.mode == 'edit' and self.controleur.selected_vertex_index is not None:
+                obj_idx, v_idx = self.controleur.selected_vertex_index
+                # Ensure v_idx is within bounds of projected_vertices_2d
+                if 0 <= v_idx < len(self.controleur.projected_vertices_2d):
+                    selected_2d_pos = self.controleur.projected_vertices_2d[v_idx]
+                    # Draw a red square around the selected vertex
+                    selection_size = 5 # Size of the selection square
+                    self.imageDraw.rectangle([selected_2d_pos[0] - selection_size,
+                                               selected_2d_pos[1] - selection_size,
+                                               selected_2d_pos[0] + selection_size,
+                                               selected_2d_pos[1] + selection_size],
+                                              fill='red', outline='red')
             # ImageTk : structure pour afficher l'image
             self.imageTk = ImageTk.PhotoImage(self.image)
             self.canvas.create_image(self.largeur / 2 + 1, self.hauteur / 2 + 1, image=self.imageTk)
@@ -175,7 +197,7 @@ class VueCourbes(object):
         toolsmenu.add_command(label="Ajouter une verticale", command=self.callbackVerticale)
         toolsmenu.add_command(label="Ajouter un segment gauche-droite", command=self.callbackGD)
         toolsmenu.add_command(label="Ajouter un segment point milieu", command=self.callbackMilieu)
-        toolsmenu.add_command(label="Ajouter un triangle rempli algo cours", command=self.callbackTriangleRempli)
+
 
         menu3D = tkinter.Menu(menu)
         menu.add_cascade(label="3D", menu=menu3D)
@@ -198,6 +220,7 @@ class VueCourbes(object):
         self.canvas.bind("<ButtonRelease-2>", self.callbackButtonRelease2)
         self.canvas.bind("<B2-Motion>", self.callbackB2Motion)
         self.canvas.bind("<MouseWheel>", self.callbackMouseWheel) # For scroll wheel zoom
+        self.canvas.bind("<Key-Tab>", self.callbackToggleMode) # Bind Tab key for mode toggle
         self.canvas.pack()
         # Image : structure contenant les donnees de l'image manipule
         self.image = Image.new("RGB", (self.largeur, self.hauteur), 'lightgrey')
