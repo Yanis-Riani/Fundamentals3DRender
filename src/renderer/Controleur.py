@@ -165,3 +165,11 @@ class ControleurCourbes(object):
         # Re-render the scene
         self.rebuild_courbes(larg, haut)
         self.vue_ref.majAffichage()
+
+    def rebuild_courbes(self, larg: int, haut: int) -> None:
+        """Rebuilds the list of courbes using the current rendering mode."""
+        self.set_rendering_mode(larg, haut, self.current_rendering_mode)
+
+    def rebuild_courbes(self, larg: int, haut: int) -> None:
+        """Rebuilds the list of courbes using the current rendering mode."""
+        self.set_rendering_mode(larg, haut, self.current_rendering_mode)
