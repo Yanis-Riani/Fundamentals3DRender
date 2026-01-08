@@ -1,6 +1,6 @@
 from __future__ import annotations
 import tkinter
-from PIL import ImageTk, Image, ImageDraw
+from PIL import ImageTk, Image, ImageDraw, ImageFont
 from tkinter.colorchooser import askcolor
 from typing import List, Tuple, Callable, Any, Optional
 
@@ -162,6 +162,37 @@ class VueCourbes(object):
             
             self.imageTk = ImageTk.PhotoImage(self.image)
             self.canvas.create_image(self.largeur / 2 + 1, self.hauteur / 2 + 1, image=self.imageTk)
+
+            # --- UI Overlay ---
+            self.canvas.delete("ui_overlay") # Clear previous overlay
+
+            if self.controleur.mode == 'edit':
+                # Blue Border
+                self.canvas.create_rectangle(2, 2, self.largeur, self.hauteur, outline='blue', width=4, tags="ui_overlay")
+
+            # Status Text
+            mode_text = f"MODE: {self.controleur.mode.upper()} (TAB)"
+            
+            # Add constraint info if grabbing
+            if self.controleur.grab_state["active"]:
+                constraint = self.controleur.grab_state["constraint"]
+                if constraint:
+                    # Map constraint code to user-friendly text
+                    constraint_text = ""
+                    if constraint == 'x': constraint_text = "X Lock"
+                    elif constraint == 'y': constraint_text = "Y Lock"
+                    elif constraint == 'z': constraint_text = "Z Lock"
+                    elif constraint == 'shift_x': constraint_text = "Y/Z Lock"
+                    elif constraint == 'shift_y': constraint_text = "X/Z Lock"
+                    elif constraint == 'shift_z': constraint_text = "X/Y Lock"
+                    
+                    if constraint_text:
+                        mode_text += f" ● {constraint_text}"
+
+            # Draw text shadow for better visibility
+            self.canvas.create_text(11, 11, text=mode_text, anchor="nw", fill="black", font=("Arial", 12, "bold"), tags="ui_overlay")
+            self.canvas.create_text(10, 10, text=mode_text, anchor="nw", fill="white", font=("Arial", 12, "bold"), tags="ui_overlay")
+
         else:
             print("Warning: majAffichage called before image or canvas are initialized.")
 
