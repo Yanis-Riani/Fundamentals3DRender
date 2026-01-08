@@ -116,11 +116,6 @@ class VueCourbes(object):
             dx = event.x - self.last_mouse_pos[0]
             dy = event.y - self.last_mouse_pos[1]
             
-            # State masks (Tkinter specific)
-            # Shift = 0x1 (1)
-            # Ctrl = 0x4 (4)
-            # Alt = 0x20000 (131072) or similar? Depends on OS. usually we check bit 0, 2 etc.
-            
             is_shift = (event.state & 0x1) != 0
             is_ctrl = (event.state & 0x4) != 0
             
@@ -250,6 +245,10 @@ class VueCourbes(object):
             self.imageDraw.rectangle([0, 0, self.largeur, self.hauteur], fill='lightgrey')
             
             self.controleur.rebuild_courbes(self.largeur, self.hauteur)
+
+            # Draw Optimized Grid Lines (Behind everything)
+            for x1, y1, x2, y2, color in self.controleur.grid_lines_2d:
+                self.imageDraw.line([(x1, y1), (x2, y2)], fill=color)
 
             fonctionPoint: DrawPointCallable = lambda p, c: self.imageDraw.point(p, c) 
             fonctionControle: DrawControlCallable = lambda p: self.imageDraw.rectangle([p[0] - 2, p[1] - 2, p[0] + 2, p[1] + 2], fill='blue')

@@ -30,6 +30,9 @@ class ControleurCourbes(object):
         self.transformed_vertices_3d: List[vecteur3.Vecteur] = []
         self.projected_vertices_2d: List[Point2D] = []
         
+        # Grid lines storage for optimized rendering: List[(x1, y1, x2, y2, color)]
+        self.grid_lines_2d: List[Tuple[int, int, int, int, Couleur]] = []
+        
         # Multi-selection: Set of (object_index, vertex_index)
         self.selected_vertices: Set[Tuple[int, int]] = set()
         
@@ -183,11 +186,6 @@ class ControleurCourbes(object):
     def _update_vertex_position(self, obj_idx: int, v_idx: int, pos_world: vecteur3.Vecteur) -> None:
         """Helper to update a vertex position given world coordinates."""
         obj = self.loaded_objects[obj_idx][0]
-        # In the new logic, Local Space IS World Space (centered at import)
-        # So we just assign the value directly.
-        # But wait, did we remove center logic entirely?
-        # If we remove "Translation(-Center)" in rendering, then "Local" = "World".
-        # Yes, we are simplifying to World Space editing.
         obj.listesommets[v_idx] = [pos_world.vx, pos_world.vy, pos_world.vz]
 
 
@@ -209,8 +207,6 @@ class ControleurCourbes(object):
         for obj_idx, v_idx in self.selected_vertices:
             obj = self.loaded_objects[obj_idx][0]
             v_coords = obj.listesommets[v_idx]
-            
-            # Vertices are now World Space
             v_world = vecteur3.Vecteur(v_coords[0], v_coords[1], v_coords[2])
             
             self.transform_state["original_positions"][(obj_idx, v_idx)] = v_world
@@ -338,7 +334,6 @@ class ControleurCourbes(object):
                     return pivot_orig + (axis_vec * dist)
                 return None
 
-        # Calculate hit points for start and current
         hit_start = get_projection_point(start_ray_origin, start_ray_dir)
         hit_curr = get_projection_point(curr_ray_origin, curr_ray_dir)
         
@@ -411,28 +406,26 @@ class ControleurCourbes(object):
     def set_rendering_mode(self, larg: int, haut: int, mode: str) -> None:
         self.current_rendering_mode = mode 
         self.courbes = []  
+        self.grid_lines_2d = [] # Clear grid lines
         
-        # Grid Rendering (Added)
-        d = self.scene.d if self.scene else 200 # Default if no scene
+        # Grid Rendering (Optimized)
+        d = self.scene.d if self.scene else 200 
         view_matrix = self.camera.get_view_matrix()
         
         for p1_world, p2_world, color in self.grid.segments:
             p1_cam = view_matrix.transform_point(p1_world)
             p2_cam = view_matrix.transform_point(p2_world)
             
-            # Simple Clipping behind camera
+            # Clipping
             if p1_cam.vz <= 0 or p2_cam.vz <= 0: continue
             
-            # Project
             x1 = round(larg // 2 + p1_cam.vx * d / p1_cam.vz)
             y1 = round((haut + 1) // 2 - 1 - p1_cam.vy * d / p1_cam.vz)
             x2 = round(larg // 2 + p2_cam.vx * d / p2_cam.vz)
             y2 = round((haut + 1) // 2 - 1 - p2_cam.vy * d / p2_cam.vz)
             
-            line = Modele.DroiteMilieu(color)
-            line.ajouterControle((x1, y1))
-            line.ajouterControle((x2, y2))
-            self.ajouterCourbe(line)
+            # Store directly instead of creating object
+            self.grid_lines_2d.append((x1, y1, x2, y2, color))
 
         if self.scene is None: return
 
@@ -448,12 +441,6 @@ class ControleurCourbes(object):
         self.projected_vertices_2d = [] 
 
         for indcptobj_stored, (obj, obj_texture) in enumerate(self.loaded_objects):
-            # OLD Logic: Recenter object
-            # center = obj.get_center()
-            # center_translation = matrix.Matrix4.create_translation(vecteur3.Vecteur(-center.vx, -center.vy, -center.vz))
-            # transform_matrix = center_translation * view_matrix
-            
-            # NEW Logic: Object is already World Centered on Import. View Matrix handles everything.
             transform_matrix = view_matrix
 
             for som_coords in obj.listesommets:
@@ -514,13 +501,10 @@ class ControleurCourbes(object):
             indcptobj = 0
             obj_texture = donnees.ajoute_objet(fic, indcptobj)
             
-            # Recenter Object ONCE on import
             obj = self.scene.listeobjets[indcptobj]
             center = obj.get_center()
             
-            # Update all vertices
             for i in range(len(obj.listesommets)):
-                # listesommets is list of [x, y, z] (not Vecteur objects yet)
                 obj.listesommets[i][0] -= center.vx
                 obj.listesommets[i][1] -= center.vy
                 obj.listesommets[i][2] -= center.vz
