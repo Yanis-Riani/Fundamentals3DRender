@@ -166,32 +166,47 @@ class VueCourbes(object):
             # --- UI Overlay ---
             self.canvas.delete("ui_overlay") # Clear previous overlay
 
-            if self.controleur.mode == 'edit':
-                # Blue Border
-                self.canvas.create_rectangle(2, 2, self.largeur, self.hauteur, outline='blue', width=4, tags="ui_overlay")
-
-            # Status Text
-            mode_text = f"MODE: {self.controleur.mode.upper()} (TAB)"
+            # Determine colors and text
+            theme_color = 'blue' if self.controleur.mode == 'edit' else 'black'
             
-            # Add constraint info if grabbing
+            status_parts = [f"{self.controleur.mode} (tab)"]
             if self.controleur.grab_state["active"]:
                 constraint = self.controleur.grab_state["constraint"]
                 if constraint:
-                    # Map constraint code to user-friendly text
-                    constraint_text = ""
-                    if constraint == 'x': constraint_text = "X Lock"
-                    elif constraint == 'y': constraint_text = "Y Lock"
-                    elif constraint == 'z': constraint_text = "Z Lock"
-                    elif constraint == 'shift_x': constraint_text = "Y/Z Lock"
-                    elif constraint == 'shift_y': constraint_text = "X/Z Lock"
-                    elif constraint == 'shift_z': constraint_text = "X/Y Lock"
+                    c_text = ""
+                    if constraint == 'x': c_text = "x"
+                    elif constraint == 'y': c_text = "y"
+                    elif constraint == 'z': c_text = "z"
+                    elif constraint == 'shift_x': c_text = "y/z"
+                    elif constraint == 'shift_y': c_text = "x/z"
+                    elif constraint == 'shift_z': c_text = "x/y"
                     
-                    if constraint_text:
-                        mode_text += f" ● {constraint_text}"
+                    if c_text:
+                        status_parts.append(f"{c_text} lock")
+            
+            text_str = " ● ".join(status_parts).lower()
 
-            # Draw text shadow for better visibility
-            self.canvas.create_text(11, 11, text=mode_text, anchor="nw", fill="black", font=("Arial", 12, "bold"), tags="ui_overlay")
-            self.canvas.create_text(10, 10, text=mode_text, anchor="nw", fill="white", font=("Arial", 12, "bold"), tags="ui_overlay")
+            # 1. Create Text (to get bbox)
+            # Position at (20, 0)
+            text_id = self.canvas.create_text(20, 0, text=text_str, anchor="nw", fill=theme_color, font=("Arial", 10, "bold"), tags="ui_overlay")
+            bbox = self.canvas.bbox(text_id) # x1, y1, x2, y2
+            
+            if bbox:
+                # 2. Draw Border (Rectangle with gap logic via mask)
+                # Border top Y at 8 pixels down
+                border_top = 8
+                border_margin = 2
+                self.canvas.create_rectangle(border_margin, border_top, self.largeur - border_margin, self.hauteur - border_margin, 
+                                             outline=theme_color, width=2, tags="ui_overlay")
+                
+                # 3. Draw Mask (White rect) to create the gap
+                # Expand mask slightly around text width
+                mask_padding = 5
+                self.canvas.create_rectangle(bbox[0] - mask_padding, border_top - 2, bbox[2] + mask_padding, border_top + 4, 
+                                             fill='white', outline='white', tags="ui_overlay")
+                
+                # 4. Lift text to ensure it's on top of mask
+                self.canvas.tag_raise(text_id)
 
         else:
             print("Warning: majAffichage called before image or canvas are initialized.")
