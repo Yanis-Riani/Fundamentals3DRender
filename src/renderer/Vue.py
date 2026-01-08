@@ -192,21 +192,46 @@ class VueCourbes(object):
             bbox = self.canvas.bbox(text_id) # x1, y1, x2, y2
             
             if bbox:
-                # 2. Draw Border (Rectangle with gap logic via mask)
-                # Border top Y at 8 pixels down
-                border_top = 8
-                border_margin = 2
-                self.canvas.create_rectangle(border_margin, border_top, self.largeur - border_margin, self.hauteur - border_margin, 
-                                             outline=theme_color, width=2, tags="ui_overlay")
+                # Border settings
+                x1, y1 = 2, 8
+                x2, y2 = self.largeur - 2, self.hauteur - 2
+                radius = 8 # Corner radius
+                gap_pad = 5
                 
-                # 3. Draw Mask (White rect) to create the gap
-                # Expand mask slightly around text width
-                mask_padding = 5
-                self.canvas.create_rectangle(bbox[0] - mask_padding, border_top - 2, bbox[2] + mask_padding, border_top + 4, 
-                                             fill='white', outline='white', tags="ui_overlay")
+                # Gap coordinates
+                gap_start = max(x1 + radius, bbox[0] - gap_pad)
+                gap_end = min(x2 - radius, bbox[2] + gap_pad)
                 
-                # 4. Lift text to ensure it's on top of mask
-                self.canvas.tag_raise(text_id)
+                # Draw Border Segments
+                
+                # Top Left Corner
+                self.canvas.create_arc(x1, y1, x1+2*radius, y1+2*radius, start=90, extent=90, style="arc", outline=theme_color, width=2, tags="ui_overlay")
+                
+                # Top Line (Left of text) - Only draw if there is space
+                if gap_start > x1 + radius:
+                    self.canvas.create_line(x1+radius, y1, gap_start, y1, fill=theme_color, width=2, tags="ui_overlay")
+                
+                # Top Line (Right of text)
+                if gap_end < x2 - radius:
+                    self.canvas.create_line(gap_end, y1, x2-radius, y1, fill=theme_color, width=2, tags="ui_overlay")
+                
+                # Top Right Corner
+                self.canvas.create_arc(x2-2*radius, y1, x2, y1+2*radius, start=0, extent=90, style="arc", outline=theme_color, width=2, tags="ui_overlay")
+                
+                # Right Line
+                self.canvas.create_line(x2, y1+radius, x2, y2-radius, fill=theme_color, width=2, tags="ui_overlay")
+                
+                # Bottom Right Corner
+                self.canvas.create_arc(x2-2*radius, y2-2*radius, x2, y2, start=270, extent=90, style="arc", outline=theme_color, width=2, tags="ui_overlay")
+                
+                # Bottom Line
+                self.canvas.create_line(x2-radius, y2, x1+radius, y2, fill=theme_color, width=2, tags="ui_overlay")
+                
+                # Bottom Left Corner
+                self.canvas.create_arc(x1, y2-2*radius, x1+2*radius, y2, start=180, extent=90, style="arc", outline=theme_color, width=2, tags="ui_overlay")
+                
+                # Left Line
+                self.canvas.create_line(x1, y2-radius, x1, y1+radius, fill=theme_color, width=2, tags="ui_overlay")
 
         else:
             print("Warning: majAffichage called before image or canvas are initialized.")
