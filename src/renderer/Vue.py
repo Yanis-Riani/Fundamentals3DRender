@@ -146,12 +146,12 @@ class VueCourbes(object):
         
         # Undo/Redo
         if ctrl_pressed and key == 'z':
-            if self.controleur.get_undo_count() > 0:
+            if not self.controleur.transform_state["active"] and self.controleur.get_undo_count() > 0:
                 self.controleur.perform_undo()
                 self.show_notification("Undo")
             return
         if ctrl_pressed and key == 'y':
-            if self.controleur.get_redo_count() > 0:
+            if not self.controleur.transform_state["active"] and self.controleur.get_redo_count() > 0:
                 self.controleur.perform_redo()
                 self.show_notification("Redo")
             return
