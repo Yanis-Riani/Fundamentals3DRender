@@ -25,7 +25,6 @@ class VueCourbes(object):
         self.imageDraw: Optional[ImageDraw.ImageDraw] = None
         self.imageTk: Optional[ImageTk.PhotoImage] = None
         self.outilsCourant: Optional[AddControlCallable] = None 
-        self.outilsDeplacer: Optional[Callable[[Point2D], None]] = None
         self.middle_mouse_pressed: bool = False
         self.last_mouse_pos: Optional[Point2D] = None
 
@@ -39,23 +38,12 @@ class VueCourbes(object):
         if not self.outilsCourant:
             # Selection logic
             self.controleur.selectionnerControle((event.x, event.y), self.controleur.mode)
-            # Legacy tool dragging (if any)
-            # For 'edit' mode, selectionnerControle now just updates state and returns None.
-            # So self.outilsDeplacer will be None for 'edit' mode.
-            self.majAffichage()
-
-    def callbackB1Motion(self, event: tkinter.Event) -> None:
-        # Legacy drag logic
-        if self.outilsDeplacer:
-            self.outilsDeplacer((event.x, event.y))
             self.majAffichage()
 
     def callbackButtonRelease1(self, event: tkinter.Event) -> None:
         if self.outilsCourant:
             self.outilsCourant((event.x, event.y))
             self.majAffichage()
-        if self.outilsDeplacer:
-            self.outilsDeplacer = None
 
     def callbackButtonRelease3(self, event: tkinter.Event) -> None:
         self.outilsCourant = None
@@ -213,7 +201,6 @@ class VueCourbes(object):
         
         self.canvas = tkinter.Canvas(fenetre, width=self.largeur, height=self.hauteur, bg='white')
         self.canvas.bind("<Button-1>", self.callbackButton1)
-        self.canvas.bind("<B1-Motion>", self.callbackB1Motion)
         self.canvas.bind("<ButtonRelease-1>", self.callbackButtonRelease1)
         self.canvas.bind("<Button-3>", self.callbackButton3)
         self.canvas.bind("<ButtonRelease-3>", self.callbackButtonRelease3)

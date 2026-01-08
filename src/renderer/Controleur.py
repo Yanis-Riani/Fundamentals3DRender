@@ -67,14 +67,9 @@ class ControleurCourbes(object):
             if not isinstance(courbe, Modele.RenderedTriangle):
                 courbe.dessinerControles(dessinerControle)
 
-    def deplacerControle(self, ic: int, ip: int, point: Point2D) -> None:
-        """ Deplace le point de controle a l'indice ip de la courbe a l'indice ic. """
-        self.courbes[ic].controles[ip] = point
-
-    def selectionnerControle(self, point: Point2D, mode: str) -> Callable[[Point2D], None] | None:
+    def selectionnerControle(self, point: Point2D, mode: str) -> None:
         """ 
         In 'edit' mode: Selects a vertex. 
-        In 'viewer' mode: Returns a callable to move a control point (legacy behavior).
         """
         xp, yp = point
         
@@ -89,16 +84,9 @@ class ControleurCourbes(object):
                     if abs(xc - xp) < 8 and abs(yc - yp) < 8:
                         self.selected_vertex_index = (obj_idx, v_idx)
                         print(f"Selected vertex: Object {obj_idx}, Vertex {v_idx}")
-                        # We do NOT return a move callable here. Movement is initiated by 'G'.
-                        return None
-            return None
+                        return
 
-        # Fallback for legacy curves
-        for ic in range(len(self.courbes)):
-            for ip in range(len(self.courbes[ic].controles)):
-                xc, yc = self.courbes[ic].controles[ip]
-                if abs(xc - xp) < 4 and abs(yc - yp) < 4:
-                    return lambda p: self.deplacerControle(ic, ip, p)
+        # Legacy 2D curve selection removed as per instruction
         return None
 
     # --- Grab Mode Logic ---
