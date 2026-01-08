@@ -37,9 +37,6 @@ class ControleurCourbes(object):
         self.selected_vertices: Set[Tuple[int, int]] = set()
         
         self.vue_ref: Any = vue_ref 
-        
-        # Grid
-        self.grid = Modele.Grille()
 
         # State for Transform (Grab/Rotate)
         self.transform_state: Dict[str, Any] = {
@@ -53,7 +50,6 @@ class ControleurCourbes(object):
         }
 
         # Undo/Redo Stacks
-        # Stores list of operations: { "type": "modify", "data": [((obj_idx, v_idx), old_pos, new_pos), ...] }
         self.undo_stack: List[Dict[str, Any]] = []
         self.redo_stack: List[Dict[str, Any]] = []
 
@@ -82,9 +78,7 @@ class ControleurCourbes(object):
                 courbe.dessinerControles(dessinerControle)
 
     def selectionnerControle(self, point: Point2D, mode: str, shift: bool = False) -> None:
-        """ Selects a vertex. Handles Shift for toggle/add. """
         xp, yp = point
-        
         if mode == 'edit' and self.loaded_objects:
             hit_found = None
             obj_idx = 0 
@@ -94,422 +88,220 @@ class ControleurCourbes(object):
                     if abs(xc - xp) < 8 and abs(yc - yp) < 8:
                         hit_found = (obj_idx, v_idx)
                         break
-            
             if hit_found:
                 if shift:
-                    if hit_found in self.selected_vertices:
-                        self.selected_vertices.remove(hit_found)
-                    else:
-                        self.selected_vertices.add(hit_found)
-                else:
-                    self.selected_vertices = {hit_found}
-                print(f"Selection updated: {len(self.selected_vertices)} vertices.")
+                    if hit_found in self.selected_vertices: self.selected_vertices.remove(hit_found)
+                    else: self.selected_vertices.add(hit_found)
+                else: self.selected_vertices = {hit_found}
             else:
-                if not shift:
-                    self.selected_vertices.clear()
-
+                if not shift: self.selected_vertices.clear()
         return None
 
     def selectionner_zone(self, rect: Tuple[int, int, int, int], mode: str, shift: bool = False) -> None:
-        """ Selects vertices within a 2D rectangle (Box Select). """
         if mode != 'edit' or not self.loaded_objects: return
-
         x1, y1, x2, y2 = rect
-        # Normalize rect
         if x1 > x2: x1, x2 = x2, x1
         if y1 > y2: y1, y2 = y2, y1
-
         obj_idx = 0
         new_selection = set()
-        
         for v_idx, proj_v in enumerate(self.projected_vertices_2d):
             xc, yc = proj_v
-            if x1 <= xc <= x2 and y1 <= yc <= y2:
-                new_selection.add((obj_idx, v_idx))
-        
-        if shift:
-            self.selected_vertices.update(new_selection)
-        else:
-            if new_selection: 
-                self.selected_vertices = new_selection
-            else:
-                self.selected_vertices.clear()
-        
-        print(f"Box selection: {len(self.selected_vertices)} vertices.")
-
-
-    # --- History Logic (Undo/Redo) ---
+            if x1 <= xc <= x2 and y1 <= yc <= y2: new_selection.add((obj_idx, v_idx))
+        if shift: self.selected_vertices.update(new_selection)
+        else: self.selected_vertices = new_selection
 
     def push_undo(self, operation: Dict[str, Any]) -> None:
         self.undo_stack.append(operation)
-        self.redo_stack.clear() # New action clears redo
-        print(f"Undo stack size: {len(self.undo_stack)}")
+        self.redo_stack.clear()
 
     def perform_undo(self) -> None:
-        if not self.undo_stack:
-            print("Nothing to undo.")
-            return
-        
+        if not self.undo_stack: return
         op = self.undo_stack.pop()
         self.redo_stack.append(op)
-        
         if op["type"] == "transform":
             for (obj_idx, v_idx), old_pos, _ in op["data"]:
                 self._update_vertex_position(obj_idx, v_idx, old_pos)
-        
         self.rebuild_courbes(self.vue_ref.largeur, self.vue_ref.hauteur)
         self.vue_ref.majAffichage()
-        print("Undo performed.")
 
     def perform_redo(self) -> None:
-        if not self.redo_stack:
-            print("Nothing to redo.")
-            return
-        
+        if not self.redo_stack: return
         op = self.redo_stack.pop()
         self.undo_stack.append(op)
-        
         if op["type"] == "transform":
             for (obj_idx, v_idx), _, new_pos in op["data"]:
                 self._update_vertex_position(obj_idx, v_idx, new_pos)
-
         self.rebuild_courbes(self.vue_ref.largeur, self.vue_ref.hauteur)
         self.vue_ref.majAffichage()
-        print("Redo performed.")
 
-    def get_undo_count(self) -> int:
-        return len(self.undo_stack)
-
-    def get_redo_count(self) -> int:
-        return len(self.redo_stack)
+    def get_undo_count(self) -> int: return len(self.undo_stack)
+    def get_redo_count(self) -> int: return len(self.redo_stack)
 
     def _update_vertex_position(self, obj_idx: int, v_idx: int, pos_world: vecteur3.Vecteur) -> None:
-        """Helper to update a vertex position given world coordinates."""
         obj = self.loaded_objects[obj_idx][0]
         obj.listesommets[v_idx] = [pos_world.vx, pos_world.vy, pos_world.vz]
 
-
-    # --- Transform Mode Logic (Grab / Rotate) ---
-
     def start_transform_mode(self, mode: str, mouse_pos: Point2D) -> None:
-        if self.mode != 'edit' or not self.selected_vertices:
-            return
-
-        self.transform_state["active"] = True
-        self.transform_state["mode"] = mode
-        self.transform_state["original_positions"] = {}
-        self.transform_state["constraint"] = None
-        self.transform_state["start_mouse_pos"] = mouse_pos
-        self.transform_state["current_angle"] = 0.0
-        
+        if self.mode != 'edit' or not self.selected_vertices: return
+        self.transform_state.update({"active": True, "mode": mode, "original_positions": {}, "constraint": None, "start_mouse_pos": mouse_pos, "current_angle": 0.0})
         pivot_accum = vecteur3.Vecteur(0,0,0)
-        
         for obj_idx, v_idx in self.selected_vertices:
-            obj = self.loaded_objects[obj_idx][0]
-            v_coords = obj.listesommets[v_idx]
+            v_coords = self.loaded_objects[obj_idx][0].listesommets[v_idx]
             v_world = vecteur3.Vecteur(v_coords[0], v_coords[1], v_coords[2])
-            
             self.transform_state["original_positions"][(obj_idx, v_idx)] = v_world
             pivot_accum = pivot_accum + v_world
-            
-        # Calculate centroid as pivot
-        count = len(self.selected_vertices)
-        self.transform_state["pivot_original"] = pivot_accum * (1.0 / count)
-        
-        print(f"{mode.capitalize()} started on {count} vertices.")
+        self.transform_state["pivot_original"] = pivot_accum * (1.0 / len(self.selected_vertices))
 
     def confirm_transform(self) -> None:
         if self.transform_state["active"]:
-            # Record History
             history_data = []
             for (obj_idx, v_idx), orig_world in self.transform_state["original_positions"].items():
-                obj = self.loaded_objects[obj_idx][0]
-                v_coords = obj.listesommets[v_idx]
+                v_coords = self.loaded_objects[obj_idx][0].listesommets[v_idx]
                 curr_world = vecteur3.Vecteur(v_coords[0], v_coords[1], v_coords[2])
-                
                 history_data.append(((obj_idx, v_idx), orig_world, curr_world))
-            
             self.push_undo({"type": "transform", "data": history_data})
-            
-            # Reset state
             self.transform_state["active"] = False
             self.transform_state["original_positions"] = {}
-            print("Transform confirmed.")
 
     def cancel_transform(self) -> None:
         if self.transform_state["active"]:
-            # Revert all
             for (obj_idx, v_idx), orig_world in self.transform_state["original_positions"].items():
                 self._update_vertex_position(obj_idx, v_idx, orig_world)
-            
             self.transform_state["active"] = False
             self.transform_state["original_positions"] = {}
-            
             self.rebuild_courbes(self.vue_ref.largeur, self.vue_ref.hauteur)
             self.vue_ref.majAffichage()
-            print("Transform cancelled.")
 
     def toggle_axis_constraint(self, key: str, shift: bool) -> None:
         if not self.transform_state["active"]: return
-
-        axis = key.lower()
-        new_constraint = axis
-        if shift:
-            new_constraint = "shift_" + axis
-        
-        if self.transform_state["constraint"] == new_constraint:
-            self.transform_state["constraint"] = None
-            print("Constraint cleared.")
-        else:
-            self.transform_state["constraint"] = new_constraint
-            print(f"Constraint set to: {new_constraint}")
+        new_c = key.lower() if not shift else "shift_" + key.lower()
+        self.transform_state["constraint"] = None if self.transform_state["constraint"] == new_c else new_c
 
     def update_transform(self, mouse_x: int, mouse_y: int) -> None:
         if not self.transform_state["active"]: return
-        
-        if self.transform_state["mode"] == 'grab':
-            self._update_grab(mouse_x, mouse_y)
-        elif self.transform_state["mode"] == 'rotate':
-            self._update_rotate(mouse_x, mouse_y)
+        if self.transform_state["mode"] == 'grab': self._update_grab(mouse_x, mouse_y)
+        elif self.transform_state["mode"] == 'rotate': self._update_rotate(mouse_x, mouse_y)
 
     def _get_mouse_ray(self, mouse_x: int, mouse_y: int) -> Tuple[vecteur3.Vecteur, vecteur3.Vecteur]:
-        larg = self.vue_ref.largeur
-        haut = self.vue_ref.hauteur
-        d = self.scene.d
-        
-        scr_x_rel = mouse_x - larg // 2
-        scr_y_rel = (haut + 1) // 2 - 1 - mouse_y
-        
+        scr_x_rel, scr_y_rel = mouse_x - self.vue_ref.largeur // 2, (self.vue_ref.hauteur + 1) // 2 - 1 - mouse_y
+        d = self.scene.d if self.scene else 400
         ray_dir_cam = vecteur3.Vecteur(scr_x_rel, scr_y_rel, d).normer()
-        ray_origin_cam = vecteur3.Vecteur(0, 0, 0)
-
-        view_matrix = self.camera.get_view_matrix()
-        inv_view = view_matrix.inverse()
-        
-        ray_origin_world = inv_view.transform_point(ray_origin_cam)
-        ray_point_world = inv_view.transform_point(ray_dir_cam)
-        ray_dir_world = (ray_point_world - ray_origin_world).normer()
-        
+        inv_view = self.camera.get_view_matrix().inverse()
+        ray_origin_world = inv_view.transform_point(vecteur3.Vecteur(0, 0, 0))
+        ray_dir_world = (inv_view.transform_point(ray_dir_cam) - ray_origin_world).normer()
         return ray_origin_world, ray_dir_world
 
-    def _intersect_plane(self, ray_origin: vecteur3.Vecteur, ray_dir: vecteur3.Vecteur, 
-                         plane_normal: vecteur3.Vecteur, plane_point: vecteur3.Vecteur) -> Optional[vecteur3.Vecteur]:
+    def _intersect_plane(self, ray_origin: vecteur3.Vecteur, ray_dir: vecteur3.Vecteur, plane_normal: vecteur3.Vecteur, plane_point: vecteur3.Vecteur) -> Optional[vecteur3.Vecteur]:
         denom = plane_normal.produitScalaire(ray_dir)
         if abs(denom) < 1e-6: return None
         t = (plane_point - ray_origin).produitScalaire(plane_normal) / denom
         return ray_origin + (ray_dir * t)
 
+    def _clip_line_near(self, p1: vecteur3.Vecteur, p2: vecteur3.Vecteur, near_z: float) -> Optional[Tuple[vecteur3.Vecteur, vecteur3.Vecteur]]:
+        if p1.vz < near_z and p2.vz < near_z: return None
+        if p1.vz >= near_z and p2.vz >= near_z: return (p1, p2)
+        t = (near_z - p1.vz) / (p2.vz - p1.vz)
+        pi = p1 + (p2 - p1) * t
+        return (pi, p2) if p1.vz < near_z else (p1, pi)
+
     def _update_grab(self, mouse_x: int, mouse_y: int) -> None:
-        larg = self.vue_ref.largeur
-        haut = self.vue_ref.hauteur
-        
-        # 1. Get Rays
-        curr_ray_origin, curr_ray_dir = self._get_mouse_ray(mouse_x, mouse_y)
-        start_x, start_y = self.transform_state["start_mouse_pos"]
-        start_ray_origin, start_ray_dir = self._get_mouse_ray(start_x, start_y)
-        
-        pivot_orig = self.transform_state["pivot_original"]
-        constraint = self.transform_state["constraint"]
+        curr_ray_o, curr_ray_d = self._get_mouse_ray(mouse_x, mouse_y)
+        start_ray_o, start_ray_d = self._get_mouse_ray(*self.transform_state["start_mouse_pos"])
+        pivot_orig, constraint = self.transform_state["pivot_original"], self.transform_state["constraint"]
         inv_view = self.camera.get_view_matrix().inverse()
-        
-        # Helper to get 3D point on constraint from a ray
-        def get_projection_point(ray_origin: vecteur3.Vecteur, ray_dir: vecteur3.Vecteur) -> Optional[vecteur3.Vecteur]:
+        def get_proj(ro, rd):
             if constraint is None:
                 cam_z_world = (inv_view.transform_point(vecteur3.Vecteur(0,0,1)) - inv_view.transform_point(vecteur3.Vecteur(0,0,0))).normer()
-                return self._intersect_plane(ray_origin, ray_dir, cam_z_world, pivot_orig)
-            
+                return self._intersect_plane(ro, rd, cam_z_world, pivot_orig)
             elif "shift_" in constraint:
-                axis_char = constraint.split('_')[1]
-                normal = vecteur3.Vecteur(1 if axis_char=='x' else 0, 1 if axis_char=='y' else 0, 1 if axis_char=='z' else 0)
-                return self._intersect_plane(ray_origin, ray_dir, normal, pivot_orig)
-            
+                ax = constraint.split('_')[1]
+                norm = vecteur3.Vecteur(1 if ax=='x' else 0, 1 if ax=='y' else 0, 1 if ax=='z' else 0)
+                return self._intersect_plane(ro, rd, norm, pivot_orig)
             else:
-                axis_vec = vecteur3.Vecteur(1 if constraint=='x' else 0, 1 if constraint=='y' else 0, 1 if constraint=='z' else 0)
+                ax_v = vecteur3.Vecteur(1 if constraint=='x' else 0, 1 if constraint=='y' else 0, 1 if constraint=='z' else 0)
                 cam_z_world = (inv_view.transform_point(vecteur3.Vecteur(0,0,1)) - inv_view.transform_point(vecteur3.Vecteur(0,0,0))).normer()
-                plane_hit = self._intersect_plane(ray_origin, ray_dir, cam_z_world, pivot_orig)
-                
-                if plane_hit:
-                    diff = plane_hit - pivot_orig
-                    dist = diff.produitScalaire(axis_vec)
-                    return pivot_orig + (axis_vec * dist)
-                return None
-
-        hit_start = get_projection_point(start_ray_origin, start_ray_dir)
-        hit_curr = get_projection_point(curr_ray_origin, curr_ray_dir)
-        
-        if hit_start and hit_curr:
-            delta = hit_curr - hit_start
-            
+                hit = self._intersect_plane(ro, rd, cam_z_world, pivot_orig)
+                return pivot_orig + (ax_v * (hit - pivot_orig).produitScalaire(ax_v)) if hit else None
+        h_start, h_curr = get_proj(start_ray_o, start_ray_d), get_proj(curr_ray_o, curr_ray_d)
+        if h_start and h_curr:
+            delta = h_curr - h_start
             for (obj_idx, v_idx), orig_world in self.transform_state["original_positions"].items():
-                new_pos_world = orig_world + delta
-                self._update_vertex_position(obj_idx, v_idx, new_pos_world)
-
-            self.rebuild_courbes(larg, haut)
+                self._update_vertex_position(obj_idx, v_idx, orig_world + delta)
+            self.rebuild_courbes(self.vue_ref.largeur, self.vue_ref.hauteur)
             self.vue_ref.majAffichage()
 
     def _update_rotate(self, mouse_x: int, mouse_y: int) -> None:
-        larg = self.vue_ref.largeur
-        haut = self.vue_ref.hauteur
-        pivot_orig = self.transform_state["pivot_original"]
-        constraint = self.transform_state["constraint"]
+        larg, haut = self.vue_ref.largeur, self.vue_ref.hauteur
+        pivot_orig, constraint = self.transform_state["pivot_original"], self.transform_state["constraint"]
         view_matrix = self.camera.get_view_matrix()
-        
-        # 1. Project Pivot to Screen
-        d = self.scene.d
-        pivot_cam = view_matrix.transform_point(pivot_orig)
-        
-        if pivot_cam.vz == 0: return 
-        
-        pivot_screen_x = (larg // 2) + (pivot_cam.vx * d / pivot_cam.vz)
-        pivot_screen_y = ((haut + 1) // 2) - 1 - (pivot_cam.vy * d / pivot_cam.vz)
-        
-        # 2. Calculate Angle
+        d = self.scene.d if self.scene else 400
+        p_cam = view_matrix.transform_point(pivot_orig)
+        if p_cam.vz == 0: return
+        p_scr_x, p_scr_y = (larg // 2) + (p_cam.vx * d / p_cam.vz), ((haut + 1) // 2) - 1 - (p_cam.vy * d / p_cam.vz)
         start_x, start_y = self.transform_state["start_mouse_pos"]
-        vec_start = (start_x - pivot_screen_x, start_y - pivot_screen_y)
-        vec_curr = (mouse_x - pivot_screen_x, mouse_y - pivot_screen_y)
-        
-        angle_start = math.atan2(vec_start[1], vec_start[0])
-        angle_curr = math.atan2(vec_curr[1], vec_curr[0])
-        angle = -(angle_curr - angle_start)
-        
+        angle = -(math.atan2(mouse_y - p_scr_y, mouse_x - p_scr_x) - math.atan2(start_y - p_scr_y, start_x - p_scr_x))
         self.transform_state["current_angle"] = angle
-        
-        # 3. Determine Rotation Axis
-        rot_axis = vecteur3.Vecteur(0,0,1) 
-        
-        inv_view = view_matrix.inverse()
-
-        if constraint is None:
-            cam_z_world = (inv_view.transform_point(vecteur3.Vecteur(0,0,1)) - inv_view.transform_point(vecteur3.Vecteur(0,0,0))).normer()
-            rot_axis = cam_z_world
-        else:
-            axis_char = constraint[-1] 
-            rot_axis = vecteur3.Vecteur(1 if axis_char=='x' else 0, 1 if axis_char=='y' else 0, 1 if axis_char=='z' else 0)
-
-        # 4. Apply Rotation (Rodrigues)
-        def rotate_point(point_rel: vecteur3.Vecteur, axis: vecteur3.Vecteur, theta: float) -> vecteur3.Vecteur:
-            term1 = point_rel * math.cos(theta)
-            term2 = axis.produitVectoriel(point_rel) * math.sin(theta)
-            term3 = axis * (axis.produitScalaire(point_rel) * (1 - math.cos(theta)))
-            return term1 + term2 + term3
-
+        inv_v = view_matrix.inverse()
+        if constraint is None: rot_axis = (inv_v.transform_point(vecteur3.Vecteur(0,0,1)) - inv_v.transform_point(vecteur3.Vecteur(0,0,0))).normer()
+        else: ax = constraint[-1]; rot_axis = vecteur3.Vecteur(1 if ax=='x' else 0, 1 if ax=='y' else 0, 1 if ax=='z' else 0)
+        def rot_p(p_rel, axis, theta):
+            return p_rel * math.cos(theta) + axis.produitVectoriel(p_rel) * math.sin(theta) + axis * (axis.produitScalaire(p_rel) * (1 - math.cos(theta)))
         for (obj_idx, v_idx), orig_world in self.transform_state["original_positions"].items():
-            rel_vec = orig_world - pivot_orig
-            rotated_rel = rotate_point(rel_vec, rot_axis, angle)
-            new_pos_world = pivot_orig + rotated_rel
-            self._update_vertex_position(obj_idx, v_idx, new_pos_world)
-
-        self.rebuild_courbes(larg, haut)
-        self.vue_ref.majAffichage()
-
+            self._update_vertex_position(obj_idx, v_idx, pivot_orig + rot_p(orig_world - pivot_orig, rot_axis, angle))
+        self.rebuild_courbes(larg, haut); self.vue_ref.majAffichage()
 
     def set_rendering_mode(self, larg: int, haut: int, mode: str) -> None:
-        self.current_rendering_mode = mode 
-        self.courbes = []  
-        self.grid_lines_2d = [] # Clear grid lines
-        
-        # Grid Rendering (Optimized)
-        d = self.scene.d if self.scene else 200 
-        view_matrix = self.camera.get_view_matrix()
-        
-        for p1_world, p2_world, color in self.grid.segments:
-            p1_cam = view_matrix.transform_point(p1_world)
-            p2_cam = view_matrix.transform_point(p2_world)
-            
-            # Clipping
-            if p1_cam.vz <= 0 or p2_cam.vz <= 0: continue
-            
-            x1 = round(larg // 2 + p1_cam.vx * d / p1_cam.vz)
-            y1 = round((haut + 1) // 2 - 1 - p1_cam.vy * d / p1_cam.vz)
-            x2 = round(larg // 2 + p2_cam.vx * d / p2_cam.vz)
-            y2 = round((haut + 1) // 2 - 1 - p2_cam.vy * d / p2_cam.vz)
-            
-            # Store directly instead of creating object
-            self.grid_lines_2d.append((x1, y1, x2, y2, color))
-
+        self.current_rendering_mode, self.courbes, self.grid_lines_2d = mode, [], []
+        step, grid_range, fog_start, fog_end, bg_rgb, near_z = 100.0, 2000.0, 500.0, 2000.0, (211, 211, 211), 1.0
+        target = self.camera.target
+        center_x, center_z = round(target.vx / step) * step, round(target.vz / step) * step
+        start_x, end_x, start_z, end_z = center_x - grid_range, center_x + grid_range, center_z - grid_range, center_z + grid_range
+        view_matrix, d = self.camera.get_view_matrix(), (self.scene.d if self.scene else 400)
+        def proc_seg(w1, w2, bcol):
+            c1, c2 = view_matrix.transform_point(w1), view_matrix.transform_point(w2)
+            clipped = self._clip_line_near(c1, c2, near_z)
+            if not clipped: return
+            c1, c2 = clipped
+            dist = ((w1 + w2) * 0.5 - self.camera.position).norm()
+            if dist > fog_end: return
+            f = 1.0 if dist <= fog_start else 1.0 - (dist - fog_start) / (fog_end - fog_start)
+            col = tuple(int(bcol[i] * f + bg_rgb[i] * (1 - f)) for i in range(3))
+            self.grid_lines_2d.append((round(larg//2 + c1.vx*d/c1.vz), round((haut+1)//2 - 1 - c1.vy*d/c1.vz), round(larg//2 + c2.vx*d/c2.vz), round((haut+1)//2 - 1 - c2.vy*d/c2.vz), col))
+        for z in range(int(start_z), int(end_z) + int(step), int(step)):
+            bcol = (0, 0, 255) if z == 0 else (150, 150, 150)
+            for x in range(int(start_x), int(end_x), int(step)): proc_seg(vecteur3.Vecteur(x, 0, z), vecteur3.Vecteur(x + step, 0, z), bcol)
+        for x in range(int(start_x), int(end_x) + int(step), int(step)):
+            bcol = (255, 0, 0) if x == 0 else (150, 150, 150)
+            for z in range(int(start_z), int(end_z), int(step)): proc_seg(vecteur3.Vecteur(x, 0, z), vecteur3.Vecteur(x, 0, z + step), bcol)
         if self.scene is None: return
-
         if mode == 'zbuffer':
-            if self.zbuffer is None:
-                self.zbuffer = Modele.ZBuffer()
+            if self.zbuffer is None: self.zbuffer = Modele.ZBuffer()
             self.zbuffer.alloc_init_zbuffer(larg, haut)
-        else:
-            self.zbuffer = None
-
-        d = self.scene.d
-        self.transformed_vertices_3d = []  
-        self.projected_vertices_2d = [] 
-
-        for indcptobj_stored, (obj, obj_texture) in enumerate(self.loaded_objects):
-            transform_matrix = view_matrix
-
-            for som_coords in obj.listesommets:
-                v = vecteur3.Vecteur(som_coords[0], som_coords[1], som_coords[2])
-                v_transformed = transform_matrix.transform_point(v)
-                self.transformed_vertices_3d.append(v_transformed) 
-
-                if v_transformed.vz == 0:
-                    xp_2d = 0
-                    yp_2d = 0
-                else:
-                    xp_2d = round(v_transformed.vx * d / v_transformed.vz)
-                    yp_2d = round(v_transformed.vy * d / v_transformed.vz)
-                self.projected_vertices_2d.append((larg // 2 + xp_2d, (haut + 1) // 2 - 1 - yp_2d)) 
-
-            for i, _ in enumerate(obj.listeindicestriangle):
+        else: self.zbuffer = None
+        self.transformed_vertices_3d, self.projected_vertices_2d = [], []
+        for obj, obj_tex in self.loaded_objects:
+            for som in obj.listesommets:
+                v_t = view_matrix.transform_point(vecteur3.Vecteur(*som))
+                self.transformed_vertices_3d.append(v_t)
+                xp, yp = (0, 0) if v_t.vz == 0 else (round(v_t.vx*d/v_t.vz), round(v_t.vy*d/v_t.vz))
+                self.projected_vertices_2d.append((larg // 2 + xp, (haut + 1) // 2 - 1 - yp))
+            for i in range(len(obj.listeindicestriangle)):
                 if mode == 'fildefer':
-                    v_indices = obj.listeindicestriangle[i]
-                    p0_idx, p1_idx, p2_idx = v_indices[0] - 1, v_indices[1] - 1, v_indices[2] - 1
+                    v_i = obj.listeindicestriangle[i]
+                    p0, p1, p2 = [self.projected_vertices_2d[idx-1] for idx in v_i]
+                    for start, end in [(p0, p1), (p1, p2), (p2, p0)]:
+                        line = Modele.DroiteMilieu(); line.ajouterControle(start); line.ajouterControle(end); self.ajouterCourbe(line)
+                elif mode in ['peintre', 'zbuffer']:
+                    self.ajouterCourbe(Modele.RenderedTriangle(obj, i, self.transformed_vertices_3d, self.projected_vertices_2d, self.scene, self.zbuffer if mode=='zbuffer' else None, larg, haut))
 
-                    point0 = self.projected_vertices_2d[p0_idx]
-                    point1 = self.projected_vertices_2d[p1_idx]
-                    point2 = self.projected_vertices_2d[p2_idx]
-
-                    droitemilieu1 = Modele.DroiteMilieu()
-                    self.ajouterCourbe(droitemilieu1)
-                    droitemilieu1.ajouterControle(point0)
-                    droitemilieu1.ajouterControle(point1)
-
-                    droitemilieu2 = Modele.DroiteMilieu()
-                    self.ajouterCourbe(droitemilieu2)
-                    droitemilieu2.ajouterControle(point1)
-                    droitemilieu2.ajouterControle(point2)
-
-                    droitemilieu3 = Modele.DroiteMilieu()
-                    self.ajouterCourbe(droitemilieu3)
-                    droitemilieu3.ajouterControle(point2)
-                    droitemilieu3.ajouterControle(point0)
-
-                elif mode == 'peintre':
-                    rendered_triangle = Modele.RenderedTriangle(obj, i, self.transformed_vertices_3d, self.projected_vertices_2d, self.scene, None, larg, haut)
-                    self.ajouterCourbe(rendered_triangle)
-                elif mode == 'zbuffer':
-                    if self.zbuffer is not None:
-                        rendered_triangle = Modele.RenderedTriangle(obj, i, self.transformed_vertices_3d, self.projected_vertices_2d, self.scene, self.zbuffer, larg, haut)
-                        self.ajouterCourbe(rendered_triangle)
-
-    def rebuild_courbes(self, larg: int, haut: int) -> None:
-        self.set_rendering_mode(larg, haut, self.current_rendering_mode)
+    def rebuild_courbes(self, larg: int, haut: int) -> None: self.set_rendering_mode(larg, haut, self.current_rendering_mode)
 
     def importer_objet(self, larg: int, haut: int) -> None:
         donnees = Import_scene.Donnees_scene(os.path.join(ASSETS_DIR, "scenes", "Donnees_scene.sce"))
         self.scene = donnees
-
-        fic = tkinter.filedialog.askopenfilename(title="Inserer l objet:", initialdir=os.path.join(ASSETS_DIR, "scenes"),
-                                              filetypes=[("Fichiers Objets", "*.obj")])
-        if len(fic) > 0:
-            indcptobj = 0
-            obj_texture = donnees.ajoute_objet(fic, indcptobj)
-            
-            obj = self.scene.listeobjets[indcptobj]
-            center = obj.get_center()
-            
+        fic = tkinter.filedialog.askopenfilename(title="Inserer l objet:", initialdir=os.path.join(ASSETS_DIR, "scenes"), filetypes=[("Fichiers Objets", "*.obj")])
+        if fic:
+            obj_idx = 0; obj_tex = donnees.ajoute_objet(fic, obj_idx); obj = self.scene.listeobjets[obj_idx]; center = obj.get_center()
             for i in range(len(obj.listesommets)):
-                obj.listesommets[i][0] -= center.vx
-                obj.listesommets[i][1] -= center.vy
-                obj.listesommets[i][2] -= center.vz
-            
-            self.loaded_objects = [(obj, obj_texture)] 
-
-            self.current_rendering_mode = 'fildefer' 
-            self.rebuild_courbes(larg, haut)
+                obj.listesommets[i][0] -= center.vx; obj.listesommets[i][1] -= center.vy; obj.listesommets[i][2] -= center.vz
+            self.loaded_objects = [(obj, obj_tex)]; self.current_rendering_mode = 'fildefer'; self.rebuild_courbes(larg, haut)
