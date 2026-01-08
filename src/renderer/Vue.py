@@ -317,7 +317,7 @@ class VueCourbes(object):
         render_mode_menu.add_command(label="Peintre", command=lambda: self.callback_set_mode('peintre'))
         render_mode_menu.add_command(label="Z-Buffer", command=lambda: self.callback_set_mode('zbuffer'))
         
-        self.canvas = tkinter.Canvas(fenetre, width=self.largeur, height=self.hauteur, bg='white')
+        self.canvas = tkinter.Canvas(fenetre, width=self.largeur, height=self.hauteur, bg='white', highlightthickness=0, borderwidth=0)
         self.canvas.bind("<Button-1>", self.callbackButton1)
         self.canvas.bind("<ButtonRelease-1>", self.callbackButtonRelease1)
         self.canvas.bind("<Button-3>", self.callbackButton3)
