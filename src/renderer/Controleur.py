@@ -102,10 +102,17 @@ class ControleurCourbes(object):
         obj = self.loaded_objects[obj_idx][0]
         v_coords = obj.listesommets[v_idx]
         
+        # Convert Local to World Space: World = Local - Center
+        # (Based on transform logic in set_rendering_mode: center_translation * view_matrix)
+        center = obj.get_center()
+        center_vec = vecteur3.Vecteur(center.vx, center.vy, center.vz)
+        v_local = vecteur3.Vecteur(v_coords[0], v_coords[1], v_coords[2])
+        v_world = v_local - center_vec
+        
         self.grab_state["active"] = True
         self.grab_state["obj_idx"] = obj_idx
         self.grab_state["vertex_idx"] = v_idx
-        self.grab_state["original_pos"] = vecteur3.Vecteur(v_coords[0], v_coords[1], v_coords[2])
+        self.grab_state["original_pos"] = v_world
         self.grab_state["constraint"] = None
         print("Grab mode started. Press 'X', 'Y', 'Z' (or Shift+) to constrain. Enter/Click to confirm. Esc/RightClick to cancel.")
 
