@@ -182,7 +182,7 @@ class VueCourbes(object):
             self.imageDraw.rectangle([0, 0, self.largeur, self.hauteur], fill='lightgrey')
             self.controleur.rebuild_courbes(self.largeur, self.hauteur)
             
-            # 1. Draw Solid Faces (Painter's order)
+            # 1. Draw Solid Faces
             for pts, color in self.controleur.solid_faces_2d:
                 self.imageDraw.polygon(pts, fill=color, outline=None)
 
@@ -199,13 +199,17 @@ class VueCourbes(object):
             fonctionControle: DrawControlCallable = lambda p: self.imageDraw.rectangle([p[0] - 2, p[1] - 2, p[0] + 2, p[1] + 2], fill='blue')
             self.controleur.dessiner(fonctionControle, fonctionPoint)
 
-            # Highlight selected vertices
+            # 5. Draw Edit Mode Vertices (Small circles)
             if self.controleur.mode == 'edit':
-                for obj_idx, v_idx in self.controleur.selected_vertices:
-                    if 0 <= v_idx < len(self.controleur.projected_vertices_2d):
-                        selected_2d_pos = self.controleur.projected_vertices_2d[v_idx]
-                        selection_size = 5 
-                        self.imageDraw.rectangle([selected_2d_pos[0] - selection_size, selected_2d_pos[1] - selection_size, selected_2d_pos[0] + selection_size, selected_2d_pos[1] + selection_size], fill='red', outline='red')
+                for obj_idx, v_idx in enumerate(range(len(self.controleur.projected_vertices_2d))):
+                    # For simplicity assuming one object or flat list.
+                    # Controller populates projected_vertices_2d.
+                    # We need to check if (0, v_idx) is in selected_vertices
+                    pos = self.controleur.projected_vertices_2d[v_idx]
+                    is_selected = (0, v_idx) in self.controleur.selected_vertices
+                    color = 'blue' if is_selected else 'black'
+                    r = 2 # radius
+                    self.imageDraw.ellipse([pos[0]-r, pos[1]-r, pos[0]+r, pos[1]+r], fill=color, outline=color)
             
             self.imageTk = ImageTk.PhotoImage(self.image)
             self.canvas.create_image(self.largeur / 2, self.hauteur / 2, image=self.imageTk)
@@ -248,7 +252,7 @@ class VueCourbes(object):
         filemenu = tkinter.Menu(menu); menu.add_cascade(label="Fichier", menu=filemenu); filemenu.add_command(label="Nouveau", command=self.callbackNouveau); filemenu.add_separator(); filemenu.add_command(label="Quitter", command=fenetre.destroy)
         menu3D = tkinter.Menu(menu); menu.add_cascade(label="3D", menu=menu3D); menu3D.add_command(label="Importer Objet...", command=self.callback_importer)
         render_mode_menu = tkinter.Menu(menu3D); menu3D.add_cascade(label="Mode de Rendu", menu=render_mode_menu)
-        render_mode_menu.add_command(label="Fil de Fer", command=lambda: self.callback_set_mode('fildefer'))
+        render_mode_menu.add_command(label="Wireframe", command=lambda: self.callback_set_mode('fildefer'))
         render_mode_menu.add_command(label="Solide", command=lambda: self.callback_set_mode('peintre'))
         render_mode_menu.add_command(label="Rendu Final (Z-Buffer)", command=lambda: self.callback_set_mode('zbuffer'))
         self.canvas = tkinter.Canvas(fenetre, width=self.largeur, height=self.hauteur, bg='white', highlightthickness=0, borderwidth=0)
