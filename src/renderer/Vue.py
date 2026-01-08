@@ -27,18 +27,43 @@ class VueCourbes(object):
         self.outilsCourant: Optional[AddControlCallable] = None 
         self.middle_mouse_pressed: bool = False
         self.last_mouse_pos: Optional[Point2D] = None
+        
+        # Selection Box State
+        self.selection_start: Optional[Point2D] = None
+        self.selection_current: Optional[Point2D] = None
 
     def callbackButton1(self, event: tkinter.Event) -> None:
-        """ Bouton gauche : utilise l'outils courant ou selectionne. """
-        
+        """ Bouton gauche : utilise l'outils courant ou commence une selection. """
         if not self.outilsCourant:
-            # Selection logic
-            self.controleur.selectionnerControle((event.x, event.y), self.controleur.mode)
+            # Start Box Selection logic
+            self.selection_start = (event.x, event.y)
+            self.selection_current = (event.x, event.y)
+            
+            # If standard click (not drag), we still want to select single point immediately?
+            # Or wait for release? Standard is usually press selects single, drag selects box.
+            # Let's select single item on press for immediate feedback, then box update on drag.
+            shift_pressed = (event.state & 0x1) != 0
+            self.controleur.selectionnerControle((event.x, event.y), self.controleur.mode, shift_pressed)
             self.majAffichage()
 
     def callbackButtonRelease1(self, event: tkinter.Event) -> None:
         if self.outilsCourant:
             self.outilsCourant((event.x, event.y))
+            self.majAffichage()
+        else:
+            # Finish Box Selection
+            if self.selection_start and self.selection_current:
+                # If dragged enough, trigger box select
+                dx = abs(self.selection_start[0] - self.selection_current[0])
+                dy = abs(self.selection_start[1] - self.selection_current[1])
+                if dx > 2 or dy > 2:
+                    shift_pressed = (event.state & 0x1) != 0
+                    rect = (self.selection_start[0], self.selection_start[1], 
+                            self.selection_current[0], self.selection_current[1])
+                    self.controleur.selectionner_zone(rect, self.controleur.mode, shift_pressed)
+            
+            self.selection_start = None
+            self.selection_current = None
             self.majAffichage()
 
     def callbackButtonRelease3(self, event: tkinter.Event) -> None:
@@ -78,6 +103,10 @@ class VueCourbes(object):
         self.majAffichage()
 
     def callbackToggleMode(self, event: tkinter.Event) -> None:
+        # Cancel grab if active before switching
+        if self.controleur.grab_state["active"]:
+            self.controleur.cancel_grab()
+
         if self.controleur.mode == 'viewer':
             self.controleur.mode = 'edit'
             print("Switched to Edit Mode")
@@ -104,33 +133,47 @@ class VueCourbes(object):
             self.controleur.cancel_grab()
             
     def callbackMotion(self, event: tkinter.Event) -> None:
-        """Handle mouse movement for grab mode."""
+        """Handle mouse movement for grab mode AND box selection."""
+        # 1. Grab Move
         if self.controleur.grab_state["active"]:
             self.controleur.update_grab(event.x, event.y)
+            return # Don't do selection logic if grabbing
+
+        # 2. Selection Box Update
+        if self.selection_start:
+            self.selection_current = (event.x, event.y)
+            self.majAffichage()
 
 
     def callbackNouveau(self) -> None:
+        if self.controleur.grab_state["active"]: self.controleur.cancel_grab()
         self.controleur = Controleur.ControleurCourbes(self)
         self.majAffichage()
 
     def callbackHorizontale(self) -> None:
+        if self.controleur.grab_state["active"]: self.controleur.cancel_grab()
         self.outilsCourant = self.controleur.nouvelleHorizontale()
 
     def callbackVerticale(self) -> None:
+        if self.controleur.grab_state["active"]: self.controleur.cancel_grab()
         self.outilsCourant = self.controleur.nouvelleVerticale()
 
     def callbackGD(self) -> None:
+        if self.controleur.grab_state["active"]: self.controleur.cancel_grab()
         self.outilsCourant = self.controleur.nouvelleGD()
 
     def callbackMilieu(self) -> None:
+        if self.controleur.grab_state["active"]: self.controleur.cancel_grab()
         self.outilsCourant = self.controleur.nouvellePointMilieu()
 
     def callback_importer(self) -> None:
+        if self.controleur.grab_state["active"]: self.controleur.cancel_grab()
         self.controleur = Controleur.ControleurCourbes(self)
         self.controleur.importer_objet(self.largeur, self.hauteur)
         self.majAffichage()
 
     def callback_set_mode(self, mode: str) -> None:
+        if self.controleur.grab_state["active"]: self.controleur.cancel_grab()
         if self.controleur.loaded_objects:
             self.controleur.set_rendering_mode(self.largeur, self.hauteur, mode)
             self.majAffichage()
@@ -148,23 +191,29 @@ class VueCourbes(object):
             fonctionControle: DrawControlCallable = lambda p: self.imageDraw.rectangle([p[0] - 2, p[1] - 2, p[0] + 2, p[1] + 2], fill='blue')
             self.controleur.dessiner(fonctionControle, fonctionPoint)
 
-            # Highlight selected vertex if in 'edit' mode
-            if self.controleur.mode == 'edit' and self.controleur.selected_vertex_index is not None:
-                obj_idx, v_idx = self.controleur.selected_vertex_index
-                if 0 <= v_idx < len(self.controleur.projected_vertices_2d):
-                    selected_2d_pos = self.controleur.projected_vertices_2d[v_idx]
-                    selection_size = 5 
-                    self.imageDraw.rectangle([selected_2d_pos[0] - selection_size,
-                                               selected_2d_pos[1] - selection_size,
-                                               selected_2d_pos[0] + selection_size,
-                                               selected_2d_pos[1] + selection_size],
-                                              fill='red', outline='red')
+            # Highlight selected vertices if in 'edit' mode
+            if self.controleur.mode == 'edit':
+                for obj_idx, v_idx in self.controleur.selected_vertices:
+                    if 0 <= v_idx < len(self.controleur.projected_vertices_2d):
+                        selected_2d_pos = self.controleur.projected_vertices_2d[v_idx]
+                        selection_size = 5 
+                        self.imageDraw.rectangle([selected_2d_pos[0] - selection_size,
+                                                   selected_2d_pos[1] - selection_size,
+                                                   selected_2d_pos[0] + selection_size,
+                                                   selected_2d_pos[1] + selection_size],
+                                                  fill='red', outline='red')
             
             self.imageTk = ImageTk.PhotoImage(self.image)
             self.canvas.create_image(self.largeur / 2 + 1, self.hauteur / 2 + 1, image=self.imageTk)
 
             # --- UI Overlay ---
             self.canvas.delete("ui_overlay") # Clear previous overlay
+
+            # Draw Selection Box
+            if self.selection_start and self.selection_current:
+                self.canvas.create_rectangle(self.selection_start[0], self.selection_start[1],
+                                             self.selection_current[0], self.selection_current[1],
+                                             outline='white', dash=(4, 4), width=1, tags="ui_overlay")
 
             # Determine colors and text
             theme_color = 'blue' if self.controleur.mode == 'edit' else 'black'
@@ -187,15 +236,16 @@ class VueCourbes(object):
             text_str = " ● ".join(status_parts).lower()
 
             # 1. Create Text (to get bbox)
-            # Position at (20, 0)
-            text_id = self.canvas.create_text(20, 0, text=text_str, anchor="nw", fill=theme_color, font=("Arial", 10, "bold"), tags="ui_overlay")
+            # Moved further right (x=35) and slightly down (y=2)
+            text_id = self.canvas.create_text(35, 2, text=text_str, anchor="nw", fill=theme_color, font=("Arial", 10, "bold"), tags="ui_overlay")
             bbox = self.canvas.bbox(text_id) # x1, y1, x2, y2
             
             if bbox:
-                # Border settings
-                x1, y1 = 2, 8
-                x2, y2 = self.largeur - 2, self.hauteur - 2
-                radius = 8 # Corner radius
+                # Border settings - consistent margin
+                margin = 5
+                x1, y1 = margin, 10
+                x2, y2 = self.largeur - margin, self.hauteur - margin
+                radius = 8 
                 gap_pad = 5
                 
                 # Gap coordinates
@@ -207,7 +257,7 @@ class VueCourbes(object):
                 # Top Left Corner
                 self.canvas.create_arc(x1, y1, x1+2*radius, y1+2*radius, start=90, extent=90, style="arc", outline=theme_color, width=2, tags="ui_overlay")
                 
-                # Top Line (Left of text) - Only draw if there is space
+                # Top Line (Left of text)
                 if gap_start > x1 + radius:
                     self.canvas.create_line(x1+radius, y1, gap_start, y1, fill=theme_color, width=2, tags="ui_overlay")
                 
