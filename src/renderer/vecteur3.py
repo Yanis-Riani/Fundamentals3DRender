@@ -30,12 +30,20 @@ class Vecteur():
         return self.vx * v.vx + self.vy * v.vy + self.vz * v.vz
 
     def dot(self, v: Vecteur) -> Vecteur:
-        """This is the cross product"""
+        """This is the cross product. KEPT FOR COMPATIBILITY."""
         vres = Vecteur()
         vres.vx = self.vy * v.vz - self.vz * v.vy
         vres.vy = -(self.vx * v.vz - self.vz * v.vx)
         vres.vz = self.vx * v.vy - self.vy * v.vx
         return vres
+
+    def produitVectoriel(self, v: Vecteur) -> Vecteur:
+        """Alias for cross product, used in Modele.py"""
+        return self.dot(v)
+
+    def produitScalaire(self, v: Vecteur) -> float:
+        """Alias for dot product"""
+        return self.__mul__(v)
 
     def __neg__(self) -> Vecteur:
         """Returns the negation of the vector."""

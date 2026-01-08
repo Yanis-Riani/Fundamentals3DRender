@@ -11,7 +11,6 @@ Point2D = Tuple[int, int]
 Couleur = Tuple[int, int, int]
 DrawPointCallable = Callable[[Point2D, Couleur], None]
 DrawControlCallable = Callable[[Point2D], None]
-# A callable that adds a control point, returning None.
 AddControlCallable = Callable[[Point2D], None]
 
 
@@ -25,25 +24,33 @@ class VueCourbes(object):
         self.image: Optional[Image.Image] = None
         self.imageDraw: Optional[ImageDraw.ImageDraw] = None
         self.imageTk: Optional[ImageTk.PhotoImage] = None
-        self.outilsCourant: Optional[AddControlCallable] = None # A single function or None
+        self.outilsCourant: Optional[AddControlCallable] = None 
         self.outilsDeplacer: Optional[Callable[[Point2D], None]] = None
         self.middle_mouse_pressed: bool = False
         self.last_mouse_pos: Optional[Point2D] = None
 
     def callbackButton1(self, event: tkinter.Event) -> None:
-        """ Bouton gauche : utilise l'outils courant. """
+        """ Bouton gauche : utilise l'outils courant ou selectionne. """
+        # Priority: Grab Confirmation
+        if self.controleur.grab_state["active"]:
+            self.controleur.confirm_grab()
+            return
+
         if not self.outilsCourant:
-            # Type ignore because selectionnerControle can return None
-            self.outilsDeplacer = self.controleur.selectionnerControle((event.x, event.y), self.controleur.mode) # type: ignore
+            # Selection logic
+            self.controleur.selectionnerControle((event.x, event.y), self.controleur.mode)
+            # Legacy tool dragging (if any)
+            # For 'edit' mode, selectionnerControle now just updates state and returns None.
+            # So self.outilsDeplacer will be None for 'edit' mode.
+            self.majAffichage()
 
     def callbackB1Motion(self, event: tkinter.Event) -> None:
+        # Legacy drag logic
         if self.outilsDeplacer:
             self.outilsDeplacer((event.x, event.y))
             self.majAffichage()
 
     def callbackButtonRelease1(self, event: tkinter.Event) -> None:
-        """ Bouton gauche : utilise l'outils courant. """
-        print(event.x, event.y)
         if self.outilsCourant:
             self.outilsCourant((event.x, event.y))
             self.majAffichage()
@@ -51,49 +58,42 @@ class VueCourbes(object):
             self.outilsDeplacer = None
 
     def callbackButtonRelease3(self, event: tkinter.Event) -> None:
-        """ Bouton droit : termine l'outils courant. """
         self.outilsCourant = None
         self.majAffichage()
 
     def callbackButton3(self, event: tkinter.Event) -> None:
-        """ Bouton droit : termine l'outils courant. """
+        """ Bouton droit : termine l'outils courant ou annule grab. """
+        if self.controleur.grab_state["active"]:
+            self.controleur.cancel_grab()
+            return
+            
         self.outilsCourant = None
         self.majAffichage()
 
     def callbackButton2(self, event: tkinter.Event) -> None:
-        """ Middle mouse button press: start rotation. """
         self.middle_mouse_pressed = True
         self.last_mouse_pos = (event.x, event.y)
 
     def callbackButtonRelease2(self, event: tkinter.Event) -> None:
-        """ Middle mouse button release: stop rotation. """
         self.middle_mouse_pressed = False
         self.last_mouse_pos = None
 
     def callbackB2Motion(self, event: tkinter.Event) -> None:
-        """ Middle mouse button drag: rotate camera or fine zoom. """
         if self.middle_mouse_pressed and self.last_mouse_pos:
             dx = event.x - self.last_mouse_pos[0]
             dy = event.y - self.last_mouse_pos[1]
-            
-            # Check for Ctrl key for fine zoom
-            if event.state & 0x4: # Mask for Control key (Ctrl key is state 4)
-                self.controleur.zoom_camera(dy) # Use dy for fine zoom
+            if event.state & 0x4: 
+                self.controleur.zoom_camera(dy) 
             else:
                 self.controleur.rotate_camera(dx, dy)
-            
             self.last_mouse_pos = (event.x, event.y)
             self.majAffichage()
 
     def callbackMouseWheel(self, event: tkinter.Event) -> None:
-        """Mouse wheel scroll: coarse zoom."""
-        # event.delta is typically 120 per click, or -120
-        # Positive delta for zoom in, negative for zoom out
         self.controleur.zoom_camera(event.delta)
         self.majAffichage()
 
     def callbackToggleMode(self, event: tkinter.Event) -> None:
-        """Toggles between 'viewer' and 'edit' mode."""
         if self.controleur.mode == 'viewer':
             self.controleur.mode = 'edit'
             print("Switched to Edit Mode")
@@ -101,42 +101,52 @@ class VueCourbes(object):
             self.controleur.mode = 'viewer'
             print("Switched to Viewer Mode")
         self.majAffichage()
+        
+    def callbackKeyPress(self, event: tkinter.Event) -> None:
+        """Handle keyboard shortcuts."""
+        key = event.keysym.lower()
+        
+        if key == 'g':
+            self.controleur.start_grab_mode()
+            # If grab starts, we might want to immediately update position if mouse pos is known?
+            # But the next motion event will handle it.
+        elif key in ['x', 'y', 'z']:
+            shift_pressed = (event.state & 0x1) != 0 # Check Shift mask
+            self.controleur.toggle_axis_constraint(key, shift_pressed)
+        elif key == 'return':
+            self.controleur.confirm_grab()
+        elif key == 'escape':
+            self.controleur.cancel_grab()
+            
+    def callbackMotion(self, event: tkinter.Event) -> None:
+        """Handle mouse movement for grab mode."""
+        if self.controleur.grab_state["active"]:
+            self.controleur.update_grab(event.x, event.y)
 
 
     def callbackNouveau(self) -> None:
-        """ Supprime toutes les courbes. """
         self.controleur = Controleur.ControleurCourbes(self)
         self.majAffichage()
 
     def callbackHorizontale(self) -> None:
-        """ Initialise l'outils courant pour ajouter une nouvelle horizontale. """
         self.outilsCourant = self.controleur.nouvelleHorizontale()
 
     def callbackVerticale(self) -> None:
-        """ Initialise l'outils courant pour ajouter une nouvelle verticale. """
         self.outilsCourant = self.controleur.nouvelleVerticale()
 
     def callbackGD(self) -> None:
-        """ Initialise l'outils courant pour ajouter un nouveau segment gauche et droite. """
         self.outilsCourant = self.controleur.nouvelleGD()
 
     def callbackMilieu(self) -> None:
-        """ Initialise l'outils courant pour ajouter une nouvelle verticale. """
         self.outilsCourant = self.controleur.nouvellePointMilieu()
 
-
-
     def callback_importer(self) -> None:
-        """Callback for the 'Importer Objet...' menu item."""
-        # Reset controller for new import
         self.controleur = Controleur.ControleurCourbes(self)
         self.controleur.importer_objet(self.largeur, self.hauteur)
         self.majAffichage()
 
     def callback_set_mode(self, mode: str) -> None:
-        """Callback to change the rendering mode of the currently loaded object(s)."""
         if self.controleur.loaded_objects:
-            # Re-render with the new mode
             self.controleur.set_rendering_mode(self.largeur, self.hauteur, mode)
             self.majAffichage()
         else:
@@ -144,33 +154,27 @@ class VueCourbes(object):
 
 
     def majAffichage(self) -> None:
-        """ Met a jour l'affichage.. """
         if self.imageDraw and self.image and self.canvas:
-            # efface la zone de dession
             self.imageDraw.rectangle([0, 0, self.largeur, self.hauteur], fill='lightgrey')
-            # dessine les courbes
-
-            # Rebuild courbes with current camera position and rendering mode
+            
             self.controleur.rebuild_courbes(self.largeur, self.hauteur)
 
-            fonctionPoint: DrawPointCallable = lambda p, c: self.imageDraw.point(p, c)  # p le point, c la couleur
+            fonctionPoint: DrawPointCallable = lambda p, c: self.imageDraw.point(p, c) 
             fonctionControle: DrawControlCallable = lambda p: self.imageDraw.rectangle([p[0] - 2, p[1] - 2, p[0] + 2, p[1] + 2], fill='blue')
             self.controleur.dessiner(fonctionControle, fonctionPoint)
 
-            # Highlight selected vertex if in 'edit' mode and a vertex is selected
+            # Highlight selected vertex if in 'edit' mode
             if self.controleur.mode == 'edit' and self.controleur.selected_vertex_index is not None:
                 obj_idx, v_idx = self.controleur.selected_vertex_index
-                # Ensure v_idx is within bounds of projected_vertices_2d
                 if 0 <= v_idx < len(self.controleur.projected_vertices_2d):
                     selected_2d_pos = self.controleur.projected_vertices_2d[v_idx]
-                    # Draw a red square around the selected vertex
-                    selection_size = 5 # Size of the selection square
+                    selection_size = 5 
                     self.imageDraw.rectangle([selected_2d_pos[0] - selection_size,
                                                selected_2d_pos[1] - selection_size,
                                                selected_2d_pos[0] + selection_size,
                                                selected_2d_pos[1] + selection_size],
                                               fill='red', outline='red')
-            # ImageTk : structure pour afficher l'image
+            
             self.imageTk = ImageTk.PhotoImage(self.image)
             self.canvas.create_image(self.largeur / 2 + 1, self.hauteur / 2 + 1, image=self.imageTk)
         else:
@@ -178,12 +182,9 @@ class VueCourbes(object):
 
 
     def executer(self) -> None:
-        """ Initialise et lance le programme. """
-        # fenetre principale
         fenetre = tkinter.Tk()
         fenetre.title("ASI1 : TP")
         fenetre.resizable(0, 0)
-        # menu
         menu = tkinter.Menu(fenetre)
         fenetre.config(menu=menu)
         filemenu = tkinter.Menu(menu)
@@ -209,7 +210,7 @@ class VueCourbes(object):
         render_mode_menu.add_command(label="Fil de Fer", command=lambda: self.callback_set_mode('fildefer'))
         render_mode_menu.add_command(label="Peintre", command=lambda: self.callback_set_mode('peintre'))
         render_mode_menu.add_command(label="Z-Buffer", command=lambda: self.callback_set_mode('zbuffer'))
-        # Canvas : widget pour le dessin dans la fenetre principale
+        
         self.canvas = tkinter.Canvas(fenetre, width=self.largeur, height=self.hauteur, bg='white')
         self.canvas.bind("<Button-1>", self.callbackButton1)
         self.canvas.bind("<B1-Motion>", self.callbackB1Motion)
@@ -219,14 +220,17 @@ class VueCourbes(object):
         self.canvas.bind("<Button-2>", self.callbackButton2)
         self.canvas.bind("<ButtonRelease-2>", self.callbackButtonRelease2)
         self.canvas.bind("<B2-Motion>", self.callbackB2Motion)
-        self.canvas.bind("<MouseWheel>", self.callbackMouseWheel) # For scroll wheel zoom
-        self.canvas.bind("<Key-Tab>", self.callbackToggleMode) # Bind Tab key for mode toggle
+        self.canvas.bind("<MouseWheel>", self.callbackMouseWheel) 
+        self.canvas.bind("<Key-Tab>", self.callbackToggleMode)
+        
+        # New Bindings for Blender-style interaction
+        # Bind KeyPress to the *window* (fenetre) to capture keys globally when focused
+        fenetre.bind("<Key>", self.callbackKeyPress)
+        self.canvas.bind("<Motion>", self.callbackMotion)
         self.canvas.pack()
-        # Image : structure contenant les donnees de l'image manipule
+        self.canvas.focus_set() # Ensure canvas has focus for key events if needed
+
         self.image = Image.new("RGB", (self.largeur, self.hauteur), 'lightgrey')
-        # ImageDraw : structure pour manipuler l'image
         self.imageDraw = ImageDraw.Draw(self.image)
-        # met a jour l'affichage
         self.majAffichage()
-        # lance le programme
         fenetre.mainloop()
