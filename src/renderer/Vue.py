@@ -202,13 +202,10 @@ class VueCourbes(object):
             # 5. Draw Edit Mode Vertices (Small circles)
             if self.controleur.mode == 'edit':
                 for obj_idx, v_idx in enumerate(range(len(self.controleur.projected_vertices_2d))):
-                    # For simplicity assuming one object or flat list.
-                    # Controller populates projected_vertices_2d.
-                    # We need to check if (0, v_idx) is in selected_vertices
                     pos = self.controleur.projected_vertices_2d[v_idx]
                     is_selected = (0, v_idx) in self.controleur.selected_vertices
-                    color = 'blue' if is_selected else 'black'
-                    r = 2 # radius
+                    color = (0, 255, 255) if is_selected else (0, 0, 0) # Light blue or black
+                    r = 3 # Increased radius
                     self.imageDraw.ellipse([pos[0]-r, pos[1]-r, pos[0]+r, pos[1]+r], fill=color, outline=color)
             
             self.imageTk = ImageTk.PhotoImage(self.image)

@@ -252,8 +252,17 @@ class ControleurCourbes(object):
         for f in faces_to_render:
             if mode == 'fildefer':
                 for start, end in [(f['p2d'][0], f['p2d'][1]), (f['p2d'][1], f['p2d'][2]), (f['p2d'][2], f['p2d'][0])]: self.wireframe_lines_2d.append((start[0], start[1], end[0], end[1], (0,0,0)))
-            elif mode == 'peintre': self.solid_faces_2d.append((f['p2d'], f['color']))
-            elif mode == 'zbuffer': self.ajouterCourbe(Modele.RenderedTriangle(f['obj'], f['face_idx'], self.transformed_vertices_3d, self.projected_vertices_2d, self.scene, self.zbuffer, larg, haut))
+            elif mode == 'peintre': 
+                self.solid_faces_2d.append((f['p2d'], f['color']))
+                # If in edit mode, also draw wireframe over solid faces
+                if self.mode == 'edit':
+                    for start, end in [(f['p2d'][0], f['p2d'][1]), (f['p2d'][1], f['p2d'][2]), (f['p2d'][2], f['p2d'][0])]: self.wireframe_lines_2d.append((start[0], start[1], end[0], end[1], (100,100,100)))
+            elif mode == 'zbuffer':
+                self.ajouterCourbe(Modele.RenderedTriangle(f['obj'], f['face_idx'], self.transformed_vertices_3d, self.projected_vertices_2d, self.scene, self.zbuffer, larg, haut))
+                # Note: For Z-Buffer, we can't easily overlay wireframe here as it's drawn later viacurves. 
+                # But we can add wireframe lines to curves or specialized list.
+                if self.mode == 'edit':
+                    for start, end in [(f['p2d'][0], f['p2d'][1]), (f['p2d'][1], f['p2d'][2]), (f['p2d'][2], f['p2d'][0])]: self.wireframe_lines_2d.append((start[0], start[1], end[0], end[1], (100,100,100)))
 
     def rebuild_courbes(self, larg: int, haut: int) -> None: self.set_rendering_mode(larg, haut, self.current_rendering_mode)
 
