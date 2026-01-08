@@ -9,8 +9,8 @@ from . import matrix
 class Camera:
     def __init__(self, distance: float = 400.0):
         self.distance = distance
-        self.azimuth = math.pi  # Rotation around Y axis
-        self.elevation = 0.0    # Rotation around X axis
+        self.azimuth = 5 * math.pi / 4  # Angled view
+        self.elevation = math.pi / 6    # Looking slightly down
         self.target = vecteur3.Vecteur(0.0, 0.0, 0.0)
         self.world_up = vecteur3.Vecteur(0.0, 1.0, 0.0)
         self.position = vecteur3.Vecteur(0.0, 0.0, self.distance)

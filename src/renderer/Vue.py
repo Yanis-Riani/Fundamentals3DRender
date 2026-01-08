@@ -227,7 +227,6 @@ class VueCourbes(object):
 
     def callback_importer(self) -> None:
         if self.controleur.transform_state["active"]: self.controleur.cancel_transform()
-        self.controleur = Controleur.ControleurCourbes(self)
         self.controleur.importer_objet(self.largeur, self.hauteur)
         self.majAffichage()
 
