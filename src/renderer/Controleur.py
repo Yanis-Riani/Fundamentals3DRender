@@ -35,13 +35,21 @@ class ControleurCourbes(object):
         
         self.vue_ref: Any = vue_ref 
 
-        # State for Grab (Move) operation
-        self.grab_state: Dict[str, Any] = {
+        # State for Transform (Grab/Rotate)
+        self.transform_state: Dict[str, Any] = {
             "active": False,
+            "mode": None, # 'grab' or 'rotate'
             "original_positions": {}, # Dict[(obj_idx, v_idx), Vecteur] (World Space)
             "pivot_original": None, # Vecteur (Centroid in World Space)
             "constraint": None, 
+            "start_mouse_pos": (0, 0),
+            "current_angle": 0.0
         }
+
+        # Undo/Redo Stacks
+        # Stores list of operations: { "type": "modify", "data": [((obj_idx, v_idx), old_pos, new_pos), ...] }
+        self.undo_stack: List[Dict[str, Any]] = []
+        self.redo_stack: List[Dict[str, Any]] = []
 
     def rotate_camera(self, dx: float, dy: float) -> None:
         self.camera.rotate(dx, dy)
@@ -113,8 +121,7 @@ class ControleurCourbes(object):
         if shift:
             self.selected_vertices.update(new_selection)
         else:
-            if new_selection: # Only replace if we actually caught something? Or clear if empty? 
-                # Standard behavior: Box select replaces unless shift is held.
+            if new_selection: 
                 self.selected_vertices = new_selection
             else:
                 self.selected_vertices.clear()
@@ -122,15 +129,72 @@ class ControleurCourbes(object):
         print(f"Box selection: {len(self.selected_vertices)} vertices.")
 
 
-    # --- Grab Mode Logic ---
+    # --- History Logic (Undo/Redo) ---
 
-    def start_grab_mode(self) -> None:
+    def push_undo(self, operation: Dict[str, Any]) -> None:
+        self.undo_stack.append(operation)
+        self.redo_stack.clear() # New action clears redo
+        print(f"Undo stack size: {len(self.undo_stack)}")
+
+    def perform_undo(self) -> None:
+        if not self.undo_stack:
+            print("Nothing to undo.")
+            return
+        
+        op = self.undo_stack.pop()
+        self.redo_stack.append(op)
+        
+        if op["type"] == "transform":
+            for (obj_idx, v_idx), old_pos, _ in op["data"]:
+                self._update_vertex_position(obj_idx, v_idx, old_pos)
+        
+        self.rebuild_courbes(self.vue_ref.largeur, self.vue_ref.hauteur)
+        self.vue_ref.majAffichage()
+        print("Undo performed.")
+
+    def perform_redo(self) -> None:
+        if not self.redo_stack:
+            print("Nothing to redo.")
+            return
+        
+        op = self.redo_stack.pop()
+        self.undo_stack.append(op)
+        
+        if op["type"] == "transform":
+            for (obj_idx, v_idx), _, new_pos in op["data"]:
+                self._update_vertex_position(obj_idx, v_idx, new_pos)
+
+        self.rebuild_courbes(self.vue_ref.largeur, self.vue_ref.hauteur)
+        self.vue_ref.majAffichage()
+        print("Redo performed.")
+
+    def get_undo_count(self) -> int:
+        return len(self.undo_stack)
+
+    def get_redo_count(self) -> int:
+        return len(self.redo_stack)
+
+    def _update_vertex_position(self, obj_idx: int, v_idx: int, pos_world: vecteur3.Vecteur) -> None:
+        """Helper to update a vertex position given world coordinates."""
+        obj = self.loaded_objects[obj_idx][0]
+        center = obj.get_center()
+        center_vec = vecteur3.Vecteur(center.vx, center.vy, center.vz)
+        pos_local = pos_world + center_vec
+        obj.listesommets[v_idx] = [pos_local.vx, pos_local.vy, pos_local.vz]
+
+
+    # --- Transform Mode Logic (Grab / Rotate) ---
+
+    def start_transform_mode(self, mode: str, mouse_pos: Point2D) -> None:
         if self.mode != 'edit' or not self.selected_vertices:
             return
 
-        self.grab_state["active"] = True
-        self.grab_state["original_positions"] = {}
-        self.grab_state["constraint"] = None
+        self.transform_state["active"] = True
+        self.transform_state["mode"] = mode
+        self.transform_state["original_positions"] = {}
+        self.transform_state["constraint"] = None
+        self.transform_state["start_mouse_pos"] = mouse_pos
+        self.transform_state["current_angle"] = 0.0
         
         pivot_accum = vecteur3.Vecteur(0,0,0)
         
@@ -144,61 +208,79 @@ class ControleurCourbes(object):
             v_local = vecteur3.Vecteur(v_coords[0], v_coords[1], v_coords[2])
             v_world = v_local - center_vec
             
-            self.grab_state["original_positions"][(obj_idx, v_idx)] = v_world
+            self.transform_state["original_positions"][(obj_idx, v_idx)] = v_world
             pivot_accum = pivot_accum + v_world
             
         # Calculate centroid as pivot
         count = len(self.selected_vertices)
-        self.grab_state["pivot_original"] = pivot_accum * (1.0 / count)
+        self.transform_state["pivot_original"] = pivot_accum * (1.0 / count)
         
-        print(f"Grab started on {count} vertices.")
+        print(f"{mode.capitalize()} started on {count} vertices.")
 
-    def confirm_grab(self) -> None:
-        if self.grab_state["active"]:
-            self.grab_state["active"] = False
-            self.grab_state["original_positions"] = {}
-            print("Grab confirmed.")
-
-    def cancel_grab(self) -> None:
-        if self.grab_state["active"]:
-            # Revert all
-            for (obj_idx, v_idx), orig_world in self.grab_state["original_positions"].items():
+    def confirm_transform(self) -> None:
+        if self.transform_state["active"]:
+            # Record History
+            history_data = []
+            for (obj_idx, v_idx), orig_world in self.transform_state["original_positions"].items():
+                # Get current world pos
+                # Re-calculate it or assume the object state is current
                 obj = self.loaded_objects[obj_idx][0]
+                v_coords = obj.listesommets[v_idx]
                 center = obj.get_center()
                 center_vec = vecteur3.Vecteur(center.vx, center.vy, center.vz)
-                orig_local = orig_world + center_vec
-                obj.listesommets[v_idx] = [orig_local.vx, orig_local.vy, orig_local.vz]
+                v_local = vecteur3.Vecteur(v_coords[0], v_coords[1], v_coords[2])
+                curr_world = v_local - center_vec
+                
+                history_data.append(((obj_idx, v_idx), orig_world, curr_world))
             
-            self.grab_state["active"] = False
-            self.grab_state["original_positions"] = {}
+            self.push_undo({"type": "transform", "data": history_data})
+            
+            # Reset state
+            self.transform_state["active"] = False
+            self.transform_state["original_positions"] = {}
+            print("Transform confirmed.")
+
+    def cancel_transform(self) -> None:
+        if self.transform_state["active"]:
+            # Revert all
+            for (obj_idx, v_idx), orig_world in self.transform_state["original_positions"].items():
+                self._update_vertex_position(obj_idx, v_idx, orig_world)
+            
+            self.transform_state["active"] = False
+            self.transform_state["original_positions"] = {}
             
             self.rebuild_courbes(self.vue_ref.largeur, self.vue_ref.hauteur)
             self.vue_ref.majAffichage()
-            print("Grab cancelled.")
+            print("Transform cancelled.")
 
     def toggle_axis_constraint(self, key: str, shift: bool) -> None:
-        if not self.grab_state["active"]: return
+        if not self.transform_state["active"]: return
 
         axis = key.lower()
         new_constraint = axis
         if shift:
             new_constraint = "shift_" + axis
         
-        if self.grab_state["constraint"] == new_constraint:
-            self.grab_state["constraint"] = None
+        if self.transform_state["constraint"] == new_constraint:
+            self.transform_state["constraint"] = None
             print("Constraint cleared.")
         else:
-            self.grab_state["constraint"] = new_constraint
+            self.transform_state["constraint"] = new_constraint
             print(f"Constraint set to: {new_constraint}")
 
-    def update_grab(self, mouse_x: int, mouse_y: int) -> None:
-        if not self.grab_state["active"]: return
+    def update_transform(self, mouse_x: int, mouse_y: int) -> None:
+        if not self.transform_state["active"]: return
+        
+        if self.transform_state["mode"] == 'grab':
+            self._update_grab(mouse_x, mouse_y)
+        elif self.transform_state["mode"] == 'rotate':
+            self._update_rotate(mouse_x, mouse_y)
 
+    def _get_mouse_ray(self, mouse_x: int, mouse_y: int) -> Tuple[vecteur3.Vecteur, vecteur3.Vecteur]:
         larg = self.vue_ref.largeur
         haut = self.vue_ref.hauteur
         d = self.scene.d
         
-        # Ray casting
         scr_x_rel = mouse_x - larg // 2
         scr_y_rel = (haut + 1) // 2 - 1 - mouse_y
         
@@ -212,33 +294,46 @@ class ControleurCourbes(object):
         ray_point_world = inv_view.transform_point(ray_dir_cam)
         ray_dir_world = (ray_point_world - ray_origin_world).normer()
         
-        # Use Pivot for intersection logic
-        pivot_orig = self.grab_state["pivot_original"]
-        constraint = self.grab_state["constraint"]
-        
-        new_pivot_world = pivot_orig # Default
-        
-        def intersect_plane(normal: vecteur3.Vecteur, plane_point: vecteur3.Vecteur) -> Optional[vecteur3.Vecteur]:
-            denom = normal.produitScalaire(ray_dir_world)
-            if abs(denom) < 1e-6: return None
-            t = (plane_point - ray_origin_world).produitScalaire(normal) / denom
-            return ray_origin_world + (ray_dir_world * t)
+        return ray_origin_world, ray_dir_world
 
+    def _intersect_plane(self, ray_origin: vecteur3.Vecteur, ray_dir: vecteur3.Vecteur, 
+                         plane_normal: vecteur3.Vecteur, plane_point: vecteur3.Vecteur) -> Optional[vecteur3.Vecteur]:
+        denom = plane_normal.produitScalaire(ray_dir)
+        if abs(denom) < 1e-6: return None
+        t = (plane_point - ray_origin).produitScalaire(plane_normal) / denom
+        return ray_origin + (ray_dir * t)
+
+    def _update_grab(self, mouse_x: int, mouse_y: int) -> None:
+        larg = self.vue_ref.largeur
+        haut = self.vue_ref.hauteur
+        
+        ray_origin_world, ray_dir_world = self._get_mouse_ray(mouse_x, mouse_y)
+        
+        pivot_orig = self.transform_state["pivot_original"]
+        constraint = self.transform_state["constraint"]
+        view_matrix = self.camera.get_view_matrix()
+        inv_view = view_matrix.inverse()
+        
+        new_pivot_world = pivot_orig 
+        
         if constraint is None:
+            # Move parallel to camera plane
             cam_z_world = (inv_view.transform_point(vecteur3.Vecteur(0,0,1)) - inv_view.transform_point(vecteur3.Vecteur(0,0,0))).normer()
-            new_pivot_world = intersect_plane(cam_z_world, pivot_orig)
+            new_pivot_world = self._intersect_plane(ray_origin_world, ray_dir_world, cam_z_world, pivot_orig)
 
         elif "shift_" in constraint:
+            # Plane constraint
             axis_char = constraint.split('_')[1]
             normal = vecteur3.Vecteur(1 if axis_char=='x' else 0, 1 if axis_char=='y' else 0, 1 if axis_char=='z' else 0)
-            intersection = intersect_plane(normal, pivot_orig)
+            intersection = self._intersect_plane(ray_origin_world, ray_dir_world, normal, pivot_orig)
             if intersection:
                 new_pivot_world = intersection
 
         else:
+            # Axis constraint
             axis_vec = vecteur3.Vecteur(1 if constraint=='x' else 0, 1 if constraint=='y' else 0, 1 if constraint=='z' else 0)
             cam_z_world = (inv_view.transform_point(vecteur3.Vecteur(0,0,1)) - inv_view.transform_point(vecteur3.Vecteur(0,0,0))).normer()
-            plane_hit = intersect_plane(cam_z_world, pivot_orig)
+            plane_hit = self._intersect_plane(ray_origin_world, ray_dir_world, cam_z_world, pivot_orig)
             
             if plane_hit:
                 diff = plane_hit - pivot_orig
@@ -246,25 +341,94 @@ class ControleurCourbes(object):
                 new_pivot_world = pivot_orig + (axis_vec * dist)
         
         if new_pivot_world:
-            # Calculate Delta
             delta = new_pivot_world - pivot_orig
-            
-            # Apply Delta to all selected vertices
-            for (obj_idx, v_idx), orig_world in self.grab_state["original_positions"].items():
-                obj = self.loaded_objects[obj_idx][0]
-                
-                # New World Pos
+            for (obj_idx, v_idx), orig_world in self.transform_state["original_positions"].items():
                 new_pos_world = orig_world + delta
-                
-                # World to Local
-                center = obj.get_center()
-                center_vec = vecteur3.Vecteur(center.vx, center.vy, center.vz)
-                new_pos_local = new_pos_world + center_vec
-                
-                obj.listesommets[v_idx] = [new_pos_local.vx, new_pos_local.vy, new_pos_local.vz]
+                self._update_vertex_position(obj_idx, v_idx, new_pos_world)
 
             self.rebuild_courbes(larg, haut)
             self.vue_ref.majAffichage()
+
+    def _update_rotate(self, mouse_x: int, mouse_y: int) -> None:
+        # Rotation is screen-based relative to pivot projected
+        larg = self.vue_ref.largeur
+        haut = self.vue_ref.hauteur
+        pivot_orig = self.transform_state["pivot_original"]
+        constraint = self.transform_state["constraint"]
+        view_matrix = self.camera.get_view_matrix()
+        
+        # 1. Project Pivot to Screen
+        d = self.scene.d
+        # This is a bit rough, reusing set_rendering_mode logic would be better but expensive
+        # Let's project manually using camera
+        # Pivot World -> Camera
+        # Local = World + Center (Usually). But here Pivot IS World.
+        # Actually Pivot is in World Space.
+        # Need to translate pivot so it's relative to Camera (0,0,0)?
+        # Transform World -> Camera = ViewMatrix * World
+        
+        pivot_cam = view_matrix.transform_point(pivot_orig)
+        
+        if pivot_cam.vz == 0: return # Avoid div by zero
+        
+        pivot_screen_x = (larg // 2) + (pivot_cam.vx * d / pivot_cam.vz)
+        # Inverting Y for screen coords
+        # y_proj = vy * d / vz.  Screen Y = (h+1)//2 - 1 - y_proj.
+        pivot_screen_y = ((haut + 1) // 2) - 1 - (pivot_cam.vy * d / pivot_cam.vz)
+        
+        # 2. Calculate Angle
+        start_x, start_y = self.transform_state["start_mouse_pos"]
+        
+        # Vector from pivot to mouse start
+        vec_start = (start_x - pivot_screen_x, start_y - pivot_screen_y)
+        # Vector from pivot to mouse current
+        vec_curr = (mouse_x - pivot_screen_x, mouse_y - pivot_screen_y)
+        
+        angle_start = math.atan2(vec_start[1], vec_start[0])
+        angle_curr = math.atan2(vec_curr[1], vec_curr[0])
+        
+        # Delta angle (radians)
+        # Note: Screen Y is inverted relative to standard cartesian for rotations? 
+        # Standard math: Right is 0, Up is positive. Tkinter Y is Down.
+        # This effectively flips the rotation direction. Let's negate angle to match visual expectation.
+        angle = -(angle_curr - angle_start)
+        
+        self.transform_state["current_angle"] = angle
+        
+        # 3. Determine Rotation Axis
+        rot_axis = vecteur3.Vecteur(0,0,1) # Default View Z (Camera Space)
+        is_global_axis = False
+        
+        inv_view = view_matrix.inverse()
+
+        if constraint is None:
+            # Rotate around Camera Z axis (View direction)
+            # Axis in World Space
+            cam_z_world = (inv_view.transform_point(vecteur3.Vecteur(0,0,1)) - inv_view.transform_point(vecteur3.Vecteur(0,0,0))).normer()
+            rot_axis = cam_z_world
+        else:
+            # Constraint ('x', 'y', 'z')
+            axis_char = constraint[-1] # Handle 'shift_x' etc if needed (usually shift locks plane -> rotates around normal)
+            rot_axis = vecteur3.Vecteur(1 if axis_char=='x' else 0, 1 if axis_char=='y' else 0, 1 if axis_char=='z' else 0)
+            is_global_axis = True
+
+        # 4. Apply Rotation (Rodrigues)
+        def rotate_point(point_rel: vecteur3.Vecteur, axis: vecteur3.Vecteur, theta: float) -> vecteur3.Vecteur:
+            # point_rel is vector from pivot
+            # Rodrigues formula
+            term1 = point_rel * math.cos(theta)
+            term2 = axis.produitVectoriel(point_rel) * math.sin(theta)
+            term3 = axis * (axis.produitScalaire(point_rel) * (1 - math.cos(theta)))
+            return term1 + term2 + term3
+
+        for (obj_idx, v_idx), orig_world in self.transform_state["original_positions"].items():
+            rel_vec = orig_world - pivot_orig
+            rotated_rel = rotate_point(rel_vec, rot_axis, angle)
+            new_pos_world = pivot_orig + rotated_rel
+            self._update_vertex_position(obj_idx, v_idx, new_pos_world)
+
+        self.rebuild_courbes(larg, haut)
+        self.vue_ref.majAffichage()
 
 
     def set_rendering_mode(self, larg: int, haut: int, mode: str) -> None:

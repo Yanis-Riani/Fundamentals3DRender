@@ -32,16 +32,41 @@ class VueCourbes(object):
         self.selection_start: Optional[Point2D] = None
         self.selection_current: Optional[Point2D] = None
 
+        # Notification State
+        self.notification_text: Optional[str] = None
+        self.notification_timer_id: Optional[str] = None
+
+    def show_notification(self, text: str, duration: int = 2000) -> None:
+        """Shows a temporary notification text."""
+        self.notification_text = text
+        self.majAffichage()
+        
+        # Cancel previous timer if exists
+        if self.notification_timer_id:
+            self.canvas.after_cancel(self.notification_timer_id)
+            self.notification_timer_id = None
+            
+        # Schedule clear
+        self.notification_timer_id = self.canvas.after(duration, self._clear_notification)
+
+    def _clear_notification(self) -> None:
+        self.notification_text = None
+        self.notification_timer_id = None
+        self.majAffichage()
+
     def callbackButton1(self, event: tkinter.Event) -> None:
-        """ Bouton gauche : utilise l'outils courant ou commence une selection. """
+        """ Bouton gauche : valide transform ou commence selection. """
+        
+        # Priority: Transform Confirmation
+        if self.controleur.transform_state["active"]:
+            self.controleur.confirm_transform()
+            return
+
         if not self.outilsCourant:
             # Start Box Selection logic
             self.selection_start = (event.x, event.y)
             self.selection_current = (event.x, event.y)
             
-            # If standard click (not drag), we still want to select single point immediately?
-            # Or wait for release? Standard is usually press selects single, drag selects box.
-            # Let's select single item on press for immediate feedback, then box update on drag.
             shift_pressed = (event.state & 0x1) != 0
             self.controleur.selectionnerControle((event.x, event.y), self.controleur.mode, shift_pressed)
             self.majAffichage()
@@ -53,7 +78,6 @@ class VueCourbes(object):
         else:
             # Finish Box Selection
             if self.selection_start and self.selection_current:
-                # If dragged enough, trigger box select
                 dx = abs(self.selection_start[0] - self.selection_current[0])
                 dy = abs(self.selection_start[1] - self.selection_current[1])
                 if dx > 2 or dy > 2:
@@ -71,9 +95,9 @@ class VueCourbes(object):
         self.majAffichage()
 
     def callbackButton3(self, event: tkinter.Event) -> None:
-        """ Bouton droit : termine l'outils courant ou annule grab. """
-        if self.controleur.grab_state["active"]:
-            self.controleur.cancel_grab()
+        """ Bouton droit : termine l'outils courant ou annule transform. """
+        if self.controleur.transform_state["active"]:
+            self.controleur.cancel_transform()
             return
             
         self.outilsCourant = None
@@ -103,9 +127,8 @@ class VueCourbes(object):
         self.majAffichage()
 
     def callbackToggleMode(self, event: tkinter.Event) -> None:
-        # Cancel grab if active before switching
-        if self.controleur.grab_state["active"]:
-            self.controleur.cancel_grab()
+        if self.controleur.transform_state["active"]:
+            self.controleur.cancel_transform()
 
         if self.controleur.mode == 'viewer':
             self.controleur.mode = 'edit'
@@ -118,62 +141,91 @@ class VueCourbes(object):
     def callbackKeyPress(self, event: tkinter.Event) -> None:
         """Handle keyboard shortcuts."""
         key = event.keysym.lower()
+        state = event.state
+        ctrl_pressed = (state & 0x4) != 0
         
+        # Undo/Redo
+        if ctrl_pressed and key == 'z':
+            if self.controleur.get_undo_count() > 0:
+                self.controleur.perform_undo()
+                self.show_notification("Undo")
+            return
+        if ctrl_pressed and key == 'y':
+            if self.controleur.get_redo_count() > 0:
+                self.controleur.perform_redo()
+                self.show_notification("Redo")
+            return
+
+        # Tools
         if key == 'g':
-            if self.controleur.grab_state["active"]:
-                self.controleur.confirm_grab()
+            if self.controleur.transform_state["active"]:
+                if self.controleur.transform_state["mode"] == 'grab':
+                    self.controleur.cancel_transform()
+                else:
+                    self.controleur.cancel_transform()
+                    self.controleur.start_transform_mode('grab', (self.canvas.winfo_pointerx() - self.canvas.winfo_rootx(), self.canvas.winfo_pointery() - self.canvas.winfo_rooty()))
             else:
-                self.controleur.start_grab_mode()
+                self.controleur.start_transform_mode('grab', (self.canvas.winfo_pointerx() - self.canvas.winfo_rootx(), self.canvas.winfo_pointery() - self.canvas.winfo_rooty()))
+        
+        elif key == 'r':
+            if self.controleur.transform_state["active"]:
+                if self.controleur.transform_state["mode"] == 'rotate':
+                    self.controleur.cancel_transform()
+                else:
+                    self.controleur.cancel_transform()
+                    self.controleur.start_transform_mode('rotate', (self.canvas.winfo_pointerx() - self.canvas.winfo_rootx(), self.canvas.winfo_pointery() - self.canvas.winfo_rooty()))
+            else:
+                self.controleur.start_transform_mode('rotate', (self.canvas.winfo_pointerx() - self.canvas.winfo_rootx(), self.canvas.winfo_pointery() - self.canvas.winfo_rooty()))
+
         elif key in ['x', 'y', 'z']:
-            shift_pressed = (event.state & 0x1) != 0 # Check Shift mask
+            shift_pressed = (state & 0x1) != 0 
             self.controleur.toggle_axis_constraint(key, shift_pressed)
+        
         elif key == 'return':
-            self.controleur.confirm_grab()
+            self.controleur.confirm_transform()
         elif key == 'escape':
-            self.controleur.cancel_grab()
+            self.controleur.cancel_transform()
             
     def callbackMotion(self, event: tkinter.Event) -> None:
-        """Handle mouse movement for grab mode AND box selection."""
-        # 1. Grab Move
-        if self.controleur.grab_state["active"]:
-            self.controleur.update_grab(event.x, event.y)
-            return # Don't do selection logic if grabbing
+        """Handle mouse movement for transform mode AND box selection."""
+        if self.controleur.transform_state["active"]:
+            self.controleur.update_transform(event.x, event.y)
+            return
 
-        # 2. Selection Box Update
         if self.selection_start:
             self.selection_current = (event.x, event.y)
             self.majAffichage()
 
 
     def callbackNouveau(self) -> None:
-        if self.controleur.grab_state["active"]: self.controleur.cancel_grab()
+        if self.controleur.transform_state["active"]: self.controleur.cancel_transform()
         self.controleur = Controleur.ControleurCourbes(self)
         self.majAffichage()
 
     def callbackHorizontale(self) -> None:
-        if self.controleur.grab_state["active"]: self.controleur.cancel_grab()
+        if self.controleur.transform_state["active"]: self.controleur.cancel_transform()
         self.outilsCourant = self.controleur.nouvelleHorizontale()
 
     def callbackVerticale(self) -> None:
-        if self.controleur.grab_state["active"]: self.controleur.cancel_grab()
+        if self.controleur.transform_state["active"]: self.controleur.cancel_transform()
         self.outilsCourant = self.controleur.nouvelleVerticale()
 
     def callbackGD(self) -> None:
-        if self.controleur.grab_state["active"]: self.controleur.cancel_grab()
+        if self.controleur.transform_state["active"]: self.controleur.cancel_transform()
         self.outilsCourant = self.controleur.nouvelleGD()
 
     def callbackMilieu(self) -> None:
-        if self.controleur.grab_state["active"]: self.controleur.cancel_grab()
+        if self.controleur.transform_state["active"]: self.controleur.cancel_transform()
         self.outilsCourant = self.controleur.nouvellePointMilieu()
 
     def callback_importer(self) -> None:
-        if self.controleur.grab_state["active"]: self.controleur.cancel_grab()
+        if self.controleur.transform_state["active"]: self.controleur.cancel_transform()
         self.controleur = Controleur.ControleurCourbes(self)
         self.controleur.importer_objet(self.largeur, self.hauteur)
         self.majAffichage()
 
     def callback_set_mode(self, mode: str) -> None:
-        if self.controleur.grab_state["active"]: self.controleur.cancel_grab()
+        if self.controleur.transform_state["active"]: self.controleur.cancel_transform()
         if self.controleur.loaded_objects:
             self.controleur.set_rendering_mode(self.largeur, self.hauteur, mode)
             self.majAffichage()
@@ -191,7 +243,7 @@ class VueCourbes(object):
             fonctionControle: DrawControlCallable = lambda p: self.imageDraw.rectangle([p[0] - 2, p[1] - 2, p[0] + 2, p[1] + 2], fill='blue')
             self.controleur.dessiner(fonctionControle, fonctionPoint)
 
-            # Highlight selected vertices if in 'edit' mode
+            # Highlight selected vertices
             if self.controleur.mode == 'edit':
                 for obj_idx, v_idx in self.controleur.selected_vertices:
                     if 0 <= v_idx < len(self.controleur.projected_vertices_2d):
@@ -207,20 +259,37 @@ class VueCourbes(object):
             self.canvas.create_image(self.largeur / 2 + 1, self.hauteur / 2 + 1, image=self.imageTk)
 
             # --- UI Overlay ---
-            self.canvas.delete("ui_overlay") # Clear previous overlay
+            self.canvas.delete("ui_overlay") 
 
-            # Draw Selection Box
+            # Selection Box
             if self.selection_start and self.selection_current:
                 self.canvas.create_rectangle(self.selection_start[0], self.selection_start[1],
                                              self.selection_current[0], self.selection_current[1],
                                              outline='white', dash=(4, 4), width=1, tags="ui_overlay")
 
-            # Determine colors and text
+            # Determine colors
             theme_color = 'blue' if self.controleur.mode == 'edit' else 'black'
             
+            # --- Bottom Left Status (History) ---
+            undo_count = self.controleur.get_undo_count()
+            redo_count = self.controleur.get_redo_count()
+            
+            history_text = f"history: {undo_count}/{redo_count} (ctrl+z/y)"
+            if self.notification_text:
+                history_text += f" ● {self.notification_text.lower()}"
+            
+            # Draw History Text (Bottom Left)
+            self.canvas.create_text(10, self.hauteur - 15, text=history_text, anchor="sw", fill=theme_color, font=("Arial", 10, "bold"), tags="ui_overlay")
+
+
+            # --- Top Left Status (Mode + Tool) ---
             status_parts = [f"{self.controleur.mode} (tab)"]
-            if self.controleur.grab_state["active"]:
-                constraint = self.controleur.grab_state["constraint"]
+            
+            if self.controleur.transform_state["active"]:
+                mode_name = self.controleur.transform_state["mode"] # grab or rotate
+                status_parts.append(mode_name)
+                
+                constraint = self.controleur.transform_state["constraint"]
                 if constraint:
                     c_text = ""
                     if constraint == 'x': c_text = "x"
@@ -229,58 +298,37 @@ class VueCourbes(object):
                     elif constraint == 'shift_x': c_text = "y/z"
                     elif constraint == 'shift_y': c_text = "x/z"
                     elif constraint == 'shift_z': c_text = "x/y"
-                    
                     if c_text:
                         status_parts.append(f"{c_text} lock")
             
             text_str = " ● ".join(status_parts).lower()
 
-            # 1. Create Text (to get bbox)
-            # Moved further right (x=35) and slightly down (y=2)
+            # Text & Border Logic
             text_id = self.canvas.create_text(35, 2, text=text_str, anchor="nw", fill=theme_color, font=("Arial", 10, "bold"), tags="ui_overlay")
-            bbox = self.canvas.bbox(text_id) # x1, y1, x2, y2
+            bbox = self.canvas.bbox(text_id) 
             
             if bbox:
-                # Border settings - consistent margin
                 margin = 5
                 x1, y1 = margin, 10
                 x2, y2 = self.largeur - margin, self.hauteur - margin
                 radius = 8 
                 gap_pad = 5
                 
-                # Gap coordinates
                 gap_start = max(x1 + radius, bbox[0] - gap_pad)
                 gap_end = min(x2 - radius, bbox[2] + gap_pad)
                 
-                # Draw Border Segments
-                
-                # Top Left Corner
                 self.canvas.create_arc(x1, y1, x1+2*radius, y1+2*radius, start=90, extent=90, style="arc", outline=theme_color, width=2, tags="ui_overlay")
                 
-                # Top Line (Left of text)
                 if gap_start > x1 + radius:
                     self.canvas.create_line(x1+radius, y1, gap_start, y1, fill=theme_color, width=2, tags="ui_overlay")
-                
-                # Top Line (Right of text)
                 if gap_end < x2 - radius:
                     self.canvas.create_line(gap_end, y1, x2-radius, y1, fill=theme_color, width=2, tags="ui_overlay")
                 
-                # Top Right Corner
                 self.canvas.create_arc(x2-2*radius, y1, x2, y1+2*radius, start=0, extent=90, style="arc", outline=theme_color, width=2, tags="ui_overlay")
-                
-                # Right Line
                 self.canvas.create_line(x2, y1+radius, x2, y2-radius, fill=theme_color, width=2, tags="ui_overlay")
-                
-                # Bottom Right Corner
                 self.canvas.create_arc(x2-2*radius, y2-2*radius, x2, y2, start=270, extent=90, style="arc", outline=theme_color, width=2, tags="ui_overlay")
-                
-                # Bottom Line
                 self.canvas.create_line(x2-radius, y2, x1+radius, y2, fill=theme_color, width=2, tags="ui_overlay")
-                
-                # Bottom Left Corner
                 self.canvas.create_arc(x1, y2-2*radius, x1+2*radius, y2, start=180, extent=90, style="arc", outline=theme_color, width=2, tags="ui_overlay")
-                
-                # Left Line
                 self.canvas.create_line(x1, y2-radius, x1, y1+radius, fill=theme_color, width=2, tags="ui_overlay")
 
         else:
@@ -298,13 +346,11 @@ class VueCourbes(object):
         filemenu.add_command(label="Nouveau", command=self.callbackNouveau)
         filemenu.add_separator()
         filemenu.add_command(label="Quitter", command=fenetre.destroy)
+        # ... tools menu ...
         toolsmenu = tkinter.Menu(menu)
         menu.add_cascade(label="Outils", menu=toolsmenu)
         toolsmenu.add_command(label="Ajouter une horizontale", command=self.callbackHorizontale)
-        toolsmenu.add_command(label="Ajouter une verticale", command=self.callbackVerticale)
-        toolsmenu.add_command(label="Ajouter un segment gauche-droite", command=self.callbackGD)
-        toolsmenu.add_command(label="Ajouter un segment point milieu", command=self.callbackMilieu)
-
+        # ... other tools ...
 
         menu3D = tkinter.Menu(menu)
         menu.add_cascade(label="3D", menu=menu3D)
@@ -328,12 +374,10 @@ class VueCourbes(object):
         self.canvas.bind("<MouseWheel>", self.callbackMouseWheel) 
         self.canvas.bind("<Key-Tab>", self.callbackToggleMode)
         
-        # New Bindings for Blender-style interaction
-        # Bind KeyPress to the *window* (fenetre) to capture keys globally when focused
         fenetre.bind("<Key>", self.callbackKeyPress)
         self.canvas.bind("<Motion>", self.callbackMotion)
         self.canvas.pack()
-        self.canvas.focus_set() # Ensure canvas has focus for key events if needed
+        self.canvas.focus_set() 
 
         self.image = Image.new("RGB", (self.largeur, self.hauteur), 'lightgrey')
         self.imageDraw = ImageDraw.Draw(self.image)
