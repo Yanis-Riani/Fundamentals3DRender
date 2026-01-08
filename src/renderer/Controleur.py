@@ -30,28 +30,45 @@ class ControleurCourbes(object):
         self.transformed_vertices_3d: List[vecteur3.Vecteur] = []
         self.projected_vertices_2d: List[Point2D] = []
         
-        # Grid lines storage for optimized rendering: List[(x1, y1, x2, y2, color)]
+        # Optimized rendering lists
         self.grid_lines_2d: List[Tuple[int, int, int, int, Couleur]] = []
+        self.wireframe_lines_2d: List[Tuple[int, int, int, int, Couleur]] = []
+        self.solid_faces_2d: List[Tuple[List[Point2D], Couleur]] = []
         
         # Multi-selection: Set of (object_index, vertex_index)
         self.selected_vertices: Set[Tuple[int, int]] = set()
         
         self.vue_ref: Any = vue_ref 
+        
+        # Grid Data (Previously in Modele.Grille)
+        self.grid_segments: List[Tuple[vecteur3.Vecteur, vecteur3.Vecteur, Couleur]] = []
+        self._generate_grid_segments(2000.0, 100.0)
 
-        # State for Transform (Grab/Rotate)
+        # State for Transform
         self.transform_state: Dict[str, Any] = {
             "active": False,
-            "mode": None, # 'grab' or 'rotate'
-            "original_positions": {}, # Dict[(obj_idx, v_idx), Vecteur] (World Space)
-            "pivot_original": None, # Vecteur (Centroid in World Space)
+            "mode": None, 
+            "original_positions": {}, 
+            "pivot_original": None, 
             "constraint": None, 
             "start_mouse_pos": (0, 0),
             "current_angle": 0.0
         }
 
-        # Undo/Redo Stacks
         self.undo_stack: List[Dict[str, Any]] = []
         self.redo_stack: List[Dict[str, Any]] = []
+
+    def _generate_grid_segments(self, size: float, step: float) -> None:
+        """Generates static grid segments."""
+        grey = (150, 150, 150)
+        count = int(size / step)
+        for i in range(-count, count + 1):
+            coord = i * step
+            self.grid_segments.append((vecteur3.Vecteur(coord, 0, -size), vecteur3.Vecteur(coord, 0, size), grey))
+            self.grid_segments.append((vecteur3.Vecteur(-size, 0, coord), vecteur3.Vecteur(size, 0, coord), grey))
+        # Axes
+        self.grid_segments.append((vecteur3.Vecteur(-size, 0, 0), vecteur3.Vecteur(size, 0, 0), (255, 0, 0))) # X
+        self.grid_segments.append((vecteur3.Vecteur(0, 0, -size), vecteur3.Vecteur(0, 0, size), (0, 0, 255))) # Z
 
     def rotate_camera(self, dx: float, dy: float) -> None:
         self.camera.rotate(dx, dy)
@@ -72,7 +89,6 @@ class ControleurCourbes(object):
                     courbe.remplir(dessinerPoint, self.zbuffer, self.scene)
             else:
                 courbe.dessinerPoints(dessinerPoint)
-
         for courbe in self.courbes:
             if not isinstance(courbe, Modele.RenderedTriangle):
                 courbe.dessinerControles(dessinerControle)
@@ -86,8 +102,7 @@ class ControleurCourbes(object):
                 for v_idx, proj_v in enumerate(self.projected_vertices_2d):
                     xc, yc = proj_v
                     if abs(xc - xp) < 8 and abs(yc - yp) < 8:
-                        hit_found = (obj_idx, v_idx)
-                        break
+                        hit_found = (obj_idx, v_idx); break
             if hit_found:
                 if shift:
                     if hit_found in self.selected_vertices: self.selected_vertices.remove(hit_found)
@@ -111,28 +126,21 @@ class ControleurCourbes(object):
         else: self.selected_vertices = new_selection
 
     def push_undo(self, operation: Dict[str, Any]) -> None:
-        self.undo_stack.append(operation)
-        self.redo_stack.clear()
+        self.undo_stack.append(operation); self.redo_stack.clear()
 
     def perform_undo(self) -> None:
         if not self.undo_stack: return
-        op = self.undo_stack.pop()
-        self.redo_stack.append(op)
+        op = self.undo_stack.pop(); self.redo_stack.append(op)
         if op["type"] == "transform":
-            for (obj_idx, v_idx), old_pos, _ in op["data"]:
-                self._update_vertex_position(obj_idx, v_idx, old_pos)
-        self.rebuild_courbes(self.vue_ref.largeur, self.vue_ref.hauteur)
-        self.vue_ref.majAffichage()
+            for (obj_idx, v_idx), old_pos, _ in op["data"]: self._update_vertex_position(obj_idx, v_idx, old_pos)
+        self.rebuild_courbes(self.vue_ref.largeur, self.vue_ref.hauteur); self.vue_ref.majAffichage()
 
     def perform_redo(self) -> None:
         if not self.redo_stack: return
-        op = self.redo_stack.pop()
-        self.undo_stack.append(op)
+        op = self.redo_stack.pop(); self.undo_stack.append(op)
         if op["type"] == "transform":
-            for (obj_idx, v_idx), _, new_pos in op["data"]:
-                self._update_vertex_position(obj_idx, v_idx, new_pos)
-        self.rebuild_courbes(self.vue_ref.largeur, self.vue_ref.hauteur)
-        self.vue_ref.majAffichage()
+            for (obj_idx, v_idx), _, new_pos in op["data"]: self._update_vertex_position(obj_idx, v_idx, new_pos)
+        self.rebuild_courbes(self.vue_ref.largeur, self.vue_ref.hauteur); self.vue_ref.majAffichage()
 
     def get_undo_count(self) -> int: return len(self.undo_stack)
     def get_redo_count(self) -> int: return len(self.redo_stack)
@@ -160,17 +168,14 @@ class ControleurCourbes(object):
                 curr_world = vecteur3.Vecteur(v_coords[0], v_coords[1], v_coords[2])
                 history_data.append(((obj_idx, v_idx), orig_world, curr_world))
             self.push_undo({"type": "transform", "data": history_data})
-            self.transform_state["active"] = False
-            self.transform_state["original_positions"] = {}
+            self.transform_state["active"] = False; self.transform_state["original_positions"] = {}
 
     def cancel_transform(self) -> None:
         if self.transform_state["active"]:
             for (obj_idx, v_idx), orig_world in self.transform_state["original_positions"].items():
                 self._update_vertex_position(obj_idx, v_idx, orig_world)
-            self.transform_state["active"] = False
-            self.transform_state["original_positions"] = {}
-            self.rebuild_courbes(self.vue_ref.largeur, self.vue_ref.hauteur)
-            self.vue_ref.majAffichage()
+            self.transform_state["active"] = False; self.transform_state["original_positions"] = {}
+            self.rebuild_courbes(self.vue_ref.largeur, self.vue_ref.hauteur); self.vue_ref.majAffichage()
 
     def toggle_axis_constraint(self, key: str, shift: bool) -> None:
         if not self.transform_state["active"]: return
@@ -214,8 +219,7 @@ class ControleurCourbes(object):
                 cam_z_world = (inv_view.transform_point(vecteur3.Vecteur(0,0,1)) - inv_view.transform_point(vecteur3.Vecteur(0,0,0))).normer()
                 return self._intersect_plane(ro, rd, cam_z_world, pivot_orig)
             elif "shift_" in constraint:
-                ax = constraint.split('_')[1]
-                norm = vecteur3.Vecteur(1 if ax=='x' else 0, 1 if ax=='y' else 0, 1 if ax=='z' else 0)
+                ax = constraint.split('_')[1]; norm = vecteur3.Vecteur(1 if ax=='x' else 0, 1 if ax=='y' else 0, 1 if ax=='z' else 0)
                 return self._intersect_plane(ro, rd, norm, pivot_orig)
             else:
                 ax_v = vecteur3.Vecteur(1 if constraint=='x' else 0, 1 if constraint=='y' else 0, 1 if constraint=='z' else 0)
@@ -225,10 +229,8 @@ class ControleurCourbes(object):
         h_start, h_curr = get_proj(start_ray_o, start_ray_d), get_proj(curr_ray_o, curr_ray_d)
         if h_start and h_curr:
             delta = h_curr - h_start
-            for (obj_idx, v_idx), orig_world in self.transform_state["original_positions"].items():
-                self._update_vertex_position(obj_idx, v_idx, orig_world + delta)
-            self.rebuild_courbes(self.vue_ref.largeur, self.vue_ref.hauteur)
-            self.vue_ref.majAffichage()
+            for (obj_idx, v_idx), orig_world in self.transform_state["original_positions"].items(): self._update_vertex_position(obj_idx, v_idx, orig_world + delta)
+            self.rebuild_courbes(self.vue_ref.largeur, self.vue_ref.hauteur); self.vue_ref.majAffichage()
 
     def _update_rotate(self, mouse_x: int, mouse_y: int) -> None:
         larg, haut = self.vue_ref.largeur, self.vue_ref.hauteur
@@ -246,12 +248,11 @@ class ControleurCourbes(object):
         else: ax = constraint[-1]; rot_axis = vecteur3.Vecteur(1 if ax=='x' else 0, 1 if ax=='y' else 0, 1 if ax=='z' else 0)
         def rot_p(p_rel, axis, theta):
             return p_rel * math.cos(theta) + axis.produitVectoriel(p_rel) * math.sin(theta) + axis * (axis.produitScalaire(p_rel) * (1 - math.cos(theta)))
-        for (obj_idx, v_idx), orig_world in self.transform_state["original_positions"].items():
-            self._update_vertex_position(obj_idx, v_idx, pivot_orig + rot_p(orig_world - pivot_orig, rot_axis, angle))
+        for (obj_idx, v_idx), orig_world in self.transform_state["original_positions"].items(): self._update_vertex_position(obj_idx, v_idx, pivot_orig + rot_p(orig_world - pivot_orig, rot_axis, angle))
         self.rebuild_courbes(larg, haut); self.vue_ref.majAffichage()
 
     def set_rendering_mode(self, larg: int, haut: int, mode: str) -> None:
-        self.current_rendering_mode, self.courbes, self.grid_lines_2d = mode, [], []
+        self.current_rendering_mode, self.courbes, self.grid_lines_2d, self.wireframe_lines_2d, self.solid_faces_2d = mode, [], [], [], []
         step, grid_range, fog_start, fog_end, bg_rgb, near_z = 100.0, 2000.0, 500.0, 2000.0, (211, 211, 211), 1.0
         target = self.camera.target
         center_x, center_z = round(target.vx / step) * step, round(target.vz / step) * step
@@ -261,8 +262,7 @@ class ControleurCourbes(object):
             c1, c2 = view_matrix.transform_point(w1), view_matrix.transform_point(w2)
             clipped = self._clip_line_near(c1, c2, near_z)
             if not clipped: return
-            c1, c2 = clipped
-            dist = ((w1 + w2) * 0.5 - self.camera.position).norm()
+            c1, c2 = clipped; dist = ((w1 + w2) * 0.5 - self.camera.position).norm()
             if dist > fog_end: return
             f = 1.0 if dist <= fog_start else 1.0 - (dist - fog_start) / (fog_end - fog_start)
             col = tuple(int(bcol[i] * f + bg_rgb[i] * (1 - f)) for i in range(3))
@@ -279,20 +279,24 @@ class ControleurCourbes(object):
             self.zbuffer.alloc_init_zbuffer(larg, haut)
         else: self.zbuffer = None
         self.transformed_vertices_3d, self.projected_vertices_2d = [], []
+        use_culling, faces_to_render = (mode in ['peintre', 'zbuffer', 'fildefer']), []
         for obj, obj_tex in self.loaded_objects:
+            obj_vertices_cam, obj_projected_2d = [], []
             for som in obj.listesommets:
-                v_t = view_matrix.transform_point(vecteur3.Vecteur(*som))
-                self.transformed_vertices_3d.append(v_t)
+                v_t = view_matrix.transform_point(vecteur3.Vecteur(*som)); obj_vertices_cam.append(v_t)
                 xp, yp = (0, 0) if v_t.vz == 0 else (round(v_t.vx*d/v_t.vz), round(v_t.vy*d/v_t.vz))
-                self.projected_vertices_2d.append((larg // 2 + xp, (haut + 1) // 2 - 1 - yp))
+                proj = (larg // 2 + xp, (haut + 1) // 2 - 1 - yp); obj_projected_2d.append(proj)
+                self.transformed_vertices_3d.append(v_t); self.projected_vertices_2d.append(proj)
             for i in range(len(obj.listeindicestriangle)):
-                if mode == 'fildefer':
-                    v_i = obj.listeindicestriangle[i]
-                    p0, p1, p2 = [self.projected_vertices_2d[idx-1] for idx in v_i]
-                    for start, end in [(p0, p1), (p1, p2), (p2, p0)]:
-                        line = Modele.DroiteMilieu(); line.ajouterControle(start); line.ajouterControle(end); self.ajouterCourbe(line)
-                elif mode in ['peintre', 'zbuffer']:
-                    self.ajouterCourbe(Modele.RenderedTriangle(obj, i, self.transformed_vertices_3d, self.projected_vertices_2d, self.scene, self.zbuffer if mode=='zbuffer' else None, larg, haut))
+                v_i = obj.listeindicestriangle[i]; p0_cam, p1_cam, p2_cam = [obj_vertices_cam[idx-1] for idx in v_i]
+                if not use_culling or (p1_cam - p0_cam).produitVectoriel(p2_cam - p0_cam).produitScalaire(-p0_cam) > 0:
+                    faces_to_render.append({'obj': obj, 'face_idx': i, 'z': (p0_cam.vz + p1_cam.vz + p2_cam.vz) / 3.0, 'p2d': [obj_projected_2d[idx-1] for idx in v_i], 'color': obj.listecouleurs[i]})
+        faces_to_render.sort(key=lambda f: f['z'], reverse=True)
+        for f in faces_to_render:
+            if mode == 'fildefer':
+                for start, end in [(f['p2d'][0], f['p2d'][1]), (f['p2d'][1], f['p2d'][2]), (f['p2d'][2], f['p2d'][0])]: self.wireframe_lines_2d.append((start[0], start[1], end[0], end[1], (0,0,0)))
+            elif mode == 'peintre': self.solid_faces_2d.append((f['p2d'], f['color']))
+            elif mode == 'zbuffer': self.ajouterCourbe(Modele.RenderedTriangle(f['obj'], f['face_idx'], self.transformed_vertices_3d, self.projected_vertices_2d, self.scene, self.zbuffer, larg, haut))
 
     def rebuild_courbes(self, larg: int, haut: int) -> None: self.set_rendering_mode(larg, haut, self.current_rendering_mode)
 
@@ -302,6 +306,5 @@ class ControleurCourbes(object):
         fic = tkinter.filedialog.askopenfilename(title="Inserer l objet:", initialdir=os.path.join(ASSETS_DIR, "scenes"), filetypes=[("Fichiers Objets", "*.obj")])
         if fic:
             obj_idx = 0; obj_tex = donnees.ajoute_objet(fic, obj_idx); obj = self.scene.listeobjets[obj_idx]; center = obj.get_center()
-            for i in range(len(obj.listesommets)):
-                obj.listesommets[i][0] -= center.vx; obj.listesommets[i][1] -= center.vy; obj.listesommets[i][2] -= center.vz
+            for i in range(len(obj.listesommets)): obj.listesommets[i][0] -= center.vx; obj.listesommets[i][1] -= center.vy; obj.listesommets[i][2] -= center.vz
             self.loaded_objects = [(obj, obj_tex)]; self.current_rendering_mode = 'fildefer'; self.rebuild_courbes(larg, haut)
