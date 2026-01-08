@@ -26,7 +26,13 @@ class Vecteur():
         vres.vz = self.vz - v.vz
         return vres
 
-    def __mul__(self, v: Vecteur) -> float:    # produit scalaire
+    def __mul__(self, v: Vecteur | float | int) -> float | Vecteur:
+        if isinstance(v, (float, int)):
+            vres = Vecteur()
+            vres.vx = self.vx * v
+            vres.vy = self.vy * v
+            vres.vz = self.vz * v
+            return vres
         return self.vx * v.vx + self.vy * v.vy + self.vz * v.vz
 
     def dot(self, v: Vecteur) -> Vecteur:
