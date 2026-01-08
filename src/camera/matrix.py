@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import List
 
-from src.renderer import vecteur3
+from ..renderer import vecteur3
 
 
 class Matrix4:
@@ -42,8 +42,6 @@ class Matrix4:
 
         return vecteur3.Vecteur(x, y, z)
 
-        return vecteur3.Vecteur(x, y, z)
-
     def transpose(self) -> Matrix4:
         result = Matrix4()
         for i in range(3): # Only transpose the 3x3 rotation part
@@ -74,7 +72,6 @@ class Matrix4:
         t_vec = vecteur3.Vecteur(self.mat[3][0], self.mat[3][1], self.mat[3][2])
         
         # Apply R^T to -t
-        # This is equivalent to multiplying the transposed rotation part by the negative translation vector
         inv_t_x = -(result.mat[0][0] * t_vec.vx + result.mat[1][0] * t_vec.vy + result.mat[2][0] * t_vec.vz)
         inv_t_y = -(result.mat[0][1] * t_vec.vx + result.mat[1][1] * t_vec.vy + result.mat[2][1] * t_vec.vz)
         inv_t_z = -(result.mat[0][2] * t_vec.vx + result.mat[1][2] * t_vec.vy + result.mat[2][2] * t_vec.vz)
@@ -93,11 +90,14 @@ class Matrix4:
 
     @staticmethod
     def look_at(eye: vecteur3.Vecteur, target: vecteur3.Vecteur, up: vecteur3.Vecteur) -> Matrix4:
-        zaxis = (target - eye).normer()
-        xaxis = (up.dot(zaxis)).normer()
-        yaxis = zaxis.dot(xaxis)
+        zaxis = (target - eye).normer() # Forward (+Z in camera space)
+        xaxis = (up.produitVectoriel(zaxis)).normer() # Camera Right
+        yaxis = zaxis.produitVectoriel(xaxis).normer() # Camera Up
 
         m = Matrix4.identity()
+        
+        # Columns represent where the basis vectors map to
+        # In transform_point: p.x * Col0 + p.y * Col1 + p.z * Col2 + Col3
         
         m.mat[0][0] = xaxis.vx
         m.mat[1][0] = xaxis.vy
@@ -107,9 +107,9 @@ class Matrix4:
         m.mat[1][1] = yaxis.vy
         m.mat[2][1] = yaxis.vz
 
-        m.mat[0][2] = -zaxis.vx
-        m.mat[1][2] = -zaxis.vy
-        m.mat[2][2] = -zaxis.vz
+        m.mat[0][2] = zaxis.vx
+        m.mat[1][2] = zaxis.vy
+        m.mat[2][2] = zaxis.vz
 
         m.mat[3][0] = -xaxis * eye
         m.mat[3][1] = -yaxis * eye
