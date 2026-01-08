@@ -30,11 +30,7 @@ class VueCourbes(object):
 
     def callbackButton1(self, event: tkinter.Event) -> None:
         """ Bouton gauche : utilise l'outils courant ou selectionne. """
-        # Priority: Grab Confirmation
-        if self.controleur.grab_state["active"]:
-            self.controleur.confirm_grab()
-            return
-
+        
         if not self.outilsCourant:
             # Selection logic
             self.controleur.selectionnerControle((event.x, event.y), self.controleur.mode)
@@ -95,9 +91,10 @@ class VueCourbes(object):
         key = event.keysym.lower()
         
         if key == 'g':
-            self.controleur.start_grab_mode()
-            # If grab starts, we might want to immediately update position if mouse pos is known?
-            # But the next motion event will handle it.
+            if self.controleur.grab_state["active"]:
+                self.controleur.confirm_grab()
+            else:
+                self.controleur.start_grab_mode()
         elif key in ['x', 'y', 'z']:
             shift_pressed = (event.state & 0x1) != 0 # Check Shift mask
             self.controleur.toggle_axis_constraint(key, shift_pressed)
