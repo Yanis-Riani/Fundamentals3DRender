@@ -272,9 +272,8 @@ class VueCourbes(object):
             
             # --- Bottom Left Status (History) ---
             undo_count = self.controleur.get_undo_count()
-            redo_count = self.controleur.get_redo_count()
             
-            history_text = f"history: {undo_count}/{redo_count} (ctrl+z/y)"
+            history_text = f"{undo_count} edit (ctrl+z/y)"
             if self.notification_text:
                 history_text += f" ● {self.notification_text.lower()}"
             
