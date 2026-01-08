@@ -307,41 +307,54 @@ class ControleurCourbes(object):
         larg = self.vue_ref.largeur
         haut = self.vue_ref.hauteur
         
-        ray_origin_world, ray_dir_world = self._get_mouse_ray(mouse_x, mouse_y)
+        # 1. Get Rays
+        # Current Mouse Ray
+        curr_ray_origin, curr_ray_dir = self._get_mouse_ray(mouse_x, mouse_y)
+        
+        # Start Mouse Ray
+        start_x, start_y = self.transform_state["start_mouse_pos"]
+        start_ray_origin, start_ray_dir = self._get_mouse_ray(start_x, start_y)
         
         pivot_orig = self.transform_state["pivot_original"]
         constraint = self.transform_state["constraint"]
-        view_matrix = self.camera.get_view_matrix()
-        inv_view = view_matrix.inverse()
+        inv_view = self.camera.get_view_matrix().inverse()
         
-        new_pivot_world = pivot_orig 
-        
-        if constraint is None:
-            # Move parallel to camera plane
-            cam_z_world = (inv_view.transform_point(vecteur3.Vecteur(0,0,1)) - inv_view.transform_point(vecteur3.Vecteur(0,0,0))).normer()
-            new_pivot_world = self._intersect_plane(ray_origin_world, ray_dir_world, cam_z_world, pivot_orig)
-
-        elif "shift_" in constraint:
-            # Plane constraint
-            axis_char = constraint.split('_')[1]
-            normal = vecteur3.Vecteur(1 if axis_char=='x' else 0, 1 if axis_char=='y' else 0, 1 if axis_char=='z' else 0)
-            intersection = self._intersect_plane(ray_origin_world, ray_dir_world, normal, pivot_orig)
-            if intersection:
-                new_pivot_world = intersection
-
-        else:
-            # Axis constraint
-            axis_vec = vecteur3.Vecteur(1 if constraint=='x' else 0, 1 if constraint=='y' else 0, 1 if constraint=='z' else 0)
-            cam_z_world = (inv_view.transform_point(vecteur3.Vecteur(0,0,1)) - inv_view.transform_point(vecteur3.Vecteur(0,0,0))).normer()
-            plane_hit = self._intersect_plane(ray_origin_world, ray_dir_world, cam_z_world, pivot_orig)
+        # Helper to get 3D point on constraint from a ray
+        def get_projection_point(ray_origin: vecteur3.Vecteur, ray_dir: vecteur3.Vecteur) -> Optional[vecteur3.Vecteur]:
+            if constraint is None:
+                # Plane parallel to camera, passing through pivot
+                cam_z_world = (inv_view.transform_point(vecteur3.Vecteur(0,0,1)) - inv_view.transform_point(vecteur3.Vecteur(0,0,0))).normer()
+                return self._intersect_plane(ray_origin, ray_dir, cam_z_world, pivot_orig)
             
-            if plane_hit:
-                diff = plane_hit - pivot_orig
-                dist = diff.produitScalaire(axis_vec)
-                new_pivot_world = pivot_orig + (axis_vec * dist)
+            elif "shift_" in constraint:
+                # Plane constraint (XY, XZ, YZ)
+                axis_char = constraint.split('_')[1]
+                normal = vecteur3.Vecteur(1 if axis_char=='x' else 0, 1 if axis_char=='y' else 0, 1 if axis_char=='z' else 0)
+                return self._intersect_plane(ray_origin, ray_dir, normal, pivot_orig)
+            
+            else:
+                # Axis constraint (X, Y, Z)
+                axis_vec = vecteur3.Vecteur(1 if constraint=='x' else 0, 1 if constraint=='y' else 0, 1 if constraint=='z' else 0)
+                
+                # For axis constraint, we project the ray onto the axis visually.
+                # Use a plane parallel to camera to catch the ray, then project closest point onto axis.
+                cam_z_world = (inv_view.transform_point(vecteur3.Vecteur(0,0,1)) - inv_view.transform_point(vecteur3.Vecteur(0,0,0))).normer()
+                plane_hit = self._intersect_plane(ray_origin, ray_dir, cam_z_world, pivot_orig)
+                
+                if plane_hit:
+                    # Project plane_hit onto the line defined by pivot_orig + t * axis_vec
+                    diff = plane_hit - pivot_orig
+                    dist = diff.produitScalaire(axis_vec)
+                    return pivot_orig + (axis_vec * dist)
+                return None
+
+        # Calculate hit points for start and current
+        hit_start = get_projection_point(start_ray_origin, start_ray_dir)
+        hit_curr = get_projection_point(curr_ray_origin, curr_ray_dir)
         
-        if new_pivot_world:
-            delta = new_pivot_world - pivot_orig
+        if hit_start and hit_curr:
+            delta = hit_curr - hit_start
+            
             for (obj_idx, v_idx), orig_world in self.transform_state["original_positions"].items():
                 new_pos_world = orig_world + delta
                 self._update_vertex_position(obj_idx, v_idx, new_pos_world)
