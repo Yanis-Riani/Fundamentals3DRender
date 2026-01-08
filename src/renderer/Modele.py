@@ -144,6 +144,9 @@ class GaucheDroite(Courbe):
 
 class DroiteMilieu(Courbe):
     """ Definit un segment algo point milieu. Derive de Courbe. """
+    def __init__(self, color: Couleur = (0, 0, 0)) -> None:
+        super().__init__()
+        self.color = color
 
     def ajouterControle(self, point: Point2D) -> None:
         """ Ajoute un point de controle a la droite.
@@ -175,19 +178,19 @@ class DroiteMilieu(Courbe):
                     dp = 2 * dy - dx
                     deltaE = 2 * dy
                     deltaNE = 2 * (dy - dx)
-                    dessinerPoint((x1, y1), (0, 0, 0))
+                    dessinerPoint((x1, y1), self.color)
                     for x in range(x1, x2):
                         if (dp <= 0):
                             dp += deltaE
                         else:
                             dp += deltaNE
                             y += 1
-                        dessinerPoint((x, y), (0, 0, 0))
+                        dessinerPoint((x, y), self.color)
                 else:
                     dp = 2 * dx - dy
                     deltaE = 2 * dx
                     deltaNE = 2 * (dx - dy)
-                    dessinerPoint((x1, y1), (0, 0, 0))
+                    dessinerPoint((x1, y1), self.color)
                     x = x1
                     for y in range(y1, y2):
                         if (dp <= 0):
@@ -195,7 +198,7 @@ class DroiteMilieu(Courbe):
                         else:
                             dp += deltaNE
                             x += 1
-                        dessinerPoint((x, y), (0, 0, 0))
+                        dessinerPoint((x, y), self.color)
             else:
                 dx = x1 - x2
                 y = y1
@@ -203,19 +206,19 @@ class DroiteMilieu(Courbe):
                     dp = 2 * dy - dx
                     deltaE = 2 * dy
                     deltaNE = 2 * (dy - dx)
-                    dessinerPoint((x1, y1), (0, 0, 0))
+                    dessinerPoint((x1, y1), self.color)
                     for x in range(x1, x2, -1):
                         if (dp <= 0):
                             dp += deltaE
                         else:
                             dp += deltaNE
                             y += 1
-                        dessinerPoint((x, y), (0, 0, 0))
+                        dessinerPoint((x, y), self.color)
                 else:
                     dp = 2 * dx - dy
                     deltaE = 2 * dx
                     deltaNE = 2 * (dx - dy)
-                    dessinerPoint((x1, y1), (0, 0, 0))
+                    dessinerPoint((x1, y1), self.color)
                     x = x1
                     for y in range(y1, y2):
                         if (dp <= 0):
@@ -223,10 +226,7 @@ class DroiteMilieu(Courbe):
                         else:
                             dp += deltaNE
                             x -= 1
-                        dessinerPoint((x, y), (0, 0, 0))
-
-
-
+                        dessinerPoint((x, y), self.color)
 
 
 class ZBuffer():
@@ -770,3 +770,33 @@ class RenderedTriangle(Courbe):
                 edgeG.maj()
                 edgeD.maj()
                 y += 1
+
+
+class Grille:
+    def __init__(self, size: float = 1000.0, step: float = 100.0) -> None:
+        self.segments: List[Tuple[vecteur3.Vecteur, vecteur3.Vecteur, Couleur]] = []
+        
+        # Grid lines (Grey)
+        grey = (150, 150, 150)
+        # Iterate from -size to size
+        count = int(size / step)
+        for i in range(-count, count + 1):
+            coord = i * step
+            # Lines parallel to Z (varying X)
+            p1 = vecteur3.Vecteur(coord, 0, -size)
+            p2 = vecteur3.Vecteur(coord, 0, size)
+            self.segments.append((p1, p2, grey))
+            
+            # Lines parallel to X (varying Z)
+            p1 = vecteur3.Vecteur(-size, 0, coord)
+            p2 = vecteur3.Vecteur(size, 0, coord)
+            self.segments.append((p1, p2, grey))
+            
+        # Axes lines (Red for X, Blue for Z) - Overwrite or add on top
+        red = (255, 0, 0)
+        blue = (0, 0, 255)
+        
+        # X Axis
+        self.segments.append((vecteur3.Vecteur(-size, 0, 0), vecteur3.Vecteur(size, 0, 0), red))
+        # Z Axis
+        self.segments.append((vecteur3.Vecteur(0, 0, -size), vecteur3.Vecteur(0, 0, size), blue))

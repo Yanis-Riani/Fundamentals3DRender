@@ -34,6 +34,9 @@ class ControleurCourbes(object):
         self.selected_vertices: Set[Tuple[int, int]] = set()
         
         self.vue_ref: Any = vue_ref 
+        
+        # Grid
+        self.grid = Modele.Grille()
 
         # State for Transform (Grab/Rotate)
         self.transform_state: Dict[str, Any] = {
@@ -56,6 +59,9 @@ class ControleurCourbes(object):
 
     def zoom_camera(self, amount: float) -> None:
         self.camera.zoom(amount)
+        
+    def pan_camera(self, dx: float, dy: float) -> None:
+        self.camera.pan(dx, dy)
 
     def ajouterCourbe(self, courbe: Modele.Courbe) -> None:
         self.courbes.append(courbe)
@@ -177,10 +183,12 @@ class ControleurCourbes(object):
     def _update_vertex_position(self, obj_idx: int, v_idx: int, pos_world: vecteur3.Vecteur) -> None:
         """Helper to update a vertex position given world coordinates."""
         obj = self.loaded_objects[obj_idx][0]
-        center = obj.get_center()
-        center_vec = vecteur3.Vecteur(center.vx, center.vy, center.vz)
-        pos_local = pos_world + center_vec
-        obj.listesommets[v_idx] = [pos_local.vx, pos_local.vy, pos_local.vz]
+        # In the new logic, Local Space IS World Space (centered at import)
+        # So we just assign the value directly.
+        # But wait, did we remove center logic entirely?
+        # If we remove "Translation(-Center)" in rendering, then "Local" = "World".
+        # Yes, we are simplifying to World Space editing.
+        obj.listesommets[v_idx] = [pos_world.vx, pos_world.vy, pos_world.vz]
 
 
     # --- Transform Mode Logic (Grab / Rotate) ---
@@ -202,11 +210,8 @@ class ControleurCourbes(object):
             obj = self.loaded_objects[obj_idx][0]
             v_coords = obj.listesommets[v_idx]
             
-            # Local to World
-            center = obj.get_center()
-            center_vec = vecteur3.Vecteur(center.vx, center.vy, center.vz)
-            v_local = vecteur3.Vecteur(v_coords[0], v_coords[1], v_coords[2])
-            v_world = v_local - center_vec
+            # Vertices are now World Space
+            v_world = vecteur3.Vecteur(v_coords[0], v_coords[1], v_coords[2])
             
             self.transform_state["original_positions"][(obj_idx, v_idx)] = v_world
             pivot_accum = pivot_accum + v_world
@@ -222,14 +227,9 @@ class ControleurCourbes(object):
             # Record History
             history_data = []
             for (obj_idx, v_idx), orig_world in self.transform_state["original_positions"].items():
-                # Get current world pos
-                # Re-calculate it or assume the object state is current
                 obj = self.loaded_objects[obj_idx][0]
                 v_coords = obj.listesommets[v_idx]
-                center = obj.get_center()
-                center_vec = vecteur3.Vecteur(center.vx, center.vy, center.vz)
-                v_local = vecteur3.Vecteur(v_coords[0], v_coords[1], v_coords[2])
-                curr_world = v_local - center_vec
+                curr_world = vecteur3.Vecteur(v_coords[0], v_coords[1], v_coords[2])
                 
                 history_data.append(((obj_idx, v_idx), orig_world, curr_world))
             
@@ -308,10 +308,7 @@ class ControleurCourbes(object):
         haut = self.vue_ref.hauteur
         
         # 1. Get Rays
-        # Current Mouse Ray
         curr_ray_origin, curr_ray_dir = self._get_mouse_ray(mouse_x, mouse_y)
-        
-        # Start Mouse Ray
         start_x, start_y = self.transform_state["start_mouse_pos"]
         start_ray_origin, start_ray_dir = self._get_mouse_ray(start_x, start_y)
         
@@ -322,27 +319,20 @@ class ControleurCourbes(object):
         # Helper to get 3D point on constraint from a ray
         def get_projection_point(ray_origin: vecteur3.Vecteur, ray_dir: vecteur3.Vecteur) -> Optional[vecteur3.Vecteur]:
             if constraint is None:
-                # Plane parallel to camera, passing through pivot
                 cam_z_world = (inv_view.transform_point(vecteur3.Vecteur(0,0,1)) - inv_view.transform_point(vecteur3.Vecteur(0,0,0))).normer()
                 return self._intersect_plane(ray_origin, ray_dir, cam_z_world, pivot_orig)
             
             elif "shift_" in constraint:
-                # Plane constraint (XY, XZ, YZ)
                 axis_char = constraint.split('_')[1]
                 normal = vecteur3.Vecteur(1 if axis_char=='x' else 0, 1 if axis_char=='y' else 0, 1 if axis_char=='z' else 0)
                 return self._intersect_plane(ray_origin, ray_dir, normal, pivot_orig)
             
             else:
-                # Axis constraint (X, Y, Z)
                 axis_vec = vecteur3.Vecteur(1 if constraint=='x' else 0, 1 if constraint=='y' else 0, 1 if constraint=='z' else 0)
-                
-                # For axis constraint, we project the ray onto the axis visually.
-                # Use a plane parallel to camera to catch the ray, then project closest point onto axis.
                 cam_z_world = (inv_view.transform_point(vecteur3.Vecteur(0,0,1)) - inv_view.transform_point(vecteur3.Vecteur(0,0,0))).normer()
                 plane_hit = self._intersect_plane(ray_origin, ray_dir, cam_z_world, pivot_orig)
                 
                 if plane_hit:
-                    # Project plane_hit onto the line defined by pivot_orig + t * axis_vec
                     diff = plane_hit - pivot_orig
                     dist = diff.produitScalaire(axis_vec)
                     return pivot_orig + (axis_vec * dist)
@@ -363,7 +353,6 @@ class ControleurCourbes(object):
             self.vue_ref.majAffichage()
 
     def _update_rotate(self, mouse_x: int, mouse_y: int) -> None:
-        # Rotation is screen-based relative to pivot projected
         larg = self.vue_ref.largeur
         haut = self.vue_ref.hauteur
         pivot_orig = self.transform_state["pivot_original"]
@@ -372,63 +361,38 @@ class ControleurCourbes(object):
         
         # 1. Project Pivot to Screen
         d = self.scene.d
-        # This is a bit rough, reusing set_rendering_mode logic would be better but expensive
-        # Let's project manually using camera
-        # Pivot World -> Camera
-        # Local = World + Center (Usually). But here Pivot IS World.
-        # Actually Pivot is in World Space.
-        # Need to translate pivot so it's relative to Camera (0,0,0)?
-        # Transform World -> Camera = ViewMatrix * World
-        
         pivot_cam = view_matrix.transform_point(pivot_orig)
         
-        if pivot_cam.vz == 0: return # Avoid div by zero
+        if pivot_cam.vz == 0: return 
         
         pivot_screen_x = (larg // 2) + (pivot_cam.vx * d / pivot_cam.vz)
-        # Inverting Y for screen coords
-        # y_proj = vy * d / vz.  Screen Y = (h+1)//2 - 1 - y_proj.
         pivot_screen_y = ((haut + 1) // 2) - 1 - (pivot_cam.vy * d / pivot_cam.vz)
         
         # 2. Calculate Angle
         start_x, start_y = self.transform_state["start_mouse_pos"]
-        
-        # Vector from pivot to mouse start
         vec_start = (start_x - pivot_screen_x, start_y - pivot_screen_y)
-        # Vector from pivot to mouse current
         vec_curr = (mouse_x - pivot_screen_x, mouse_y - pivot_screen_y)
         
         angle_start = math.atan2(vec_start[1], vec_start[0])
         angle_curr = math.atan2(vec_curr[1], vec_curr[0])
-        
-        # Delta angle (radians)
-        # Note: Screen Y is inverted relative to standard cartesian for rotations? 
-        # Standard math: Right is 0, Up is positive. Tkinter Y is Down.
-        # This effectively flips the rotation direction. Let's negate angle to match visual expectation.
         angle = -(angle_curr - angle_start)
         
         self.transform_state["current_angle"] = angle
         
         # 3. Determine Rotation Axis
-        rot_axis = vecteur3.Vecteur(0,0,1) # Default View Z (Camera Space)
-        is_global_axis = False
+        rot_axis = vecteur3.Vecteur(0,0,1) 
         
         inv_view = view_matrix.inverse()
 
         if constraint is None:
-            # Rotate around Camera Z axis (View direction)
-            # Axis in World Space
             cam_z_world = (inv_view.transform_point(vecteur3.Vecteur(0,0,1)) - inv_view.transform_point(vecteur3.Vecteur(0,0,0))).normer()
             rot_axis = cam_z_world
         else:
-            # Constraint ('x', 'y', 'z')
-            axis_char = constraint[-1] # Handle 'shift_x' etc if needed (usually shift locks plane -> rotates around normal)
+            axis_char = constraint[-1] 
             rot_axis = vecteur3.Vecteur(1 if axis_char=='x' else 0, 1 if axis_char=='y' else 0, 1 if axis_char=='z' else 0)
-            is_global_axis = True
 
         # 4. Apply Rotation (Rodrigues)
         def rotate_point(point_rel: vecteur3.Vecteur, axis: vecteur3.Vecteur, theta: float) -> vecteur3.Vecteur:
-            # point_rel is vector from pivot
-            # Rodrigues formula
             term1 = point_rel * math.cos(theta)
             term2 = axis.produitVectoriel(point_rel) * math.sin(theta)
             term3 = axis * (axis.produitScalaire(point_rel) * (1 - math.cos(theta)))
@@ -447,8 +411,30 @@ class ControleurCourbes(object):
     def set_rendering_mode(self, larg: int, haut: int, mode: str) -> None:
         self.current_rendering_mode = mode 
         self.courbes = []  
-        if self.scene is None: 
-            return
+        
+        # Grid Rendering (Added)
+        d = self.scene.d if self.scene else 200 # Default if no scene
+        view_matrix = self.camera.get_view_matrix()
+        
+        for p1_world, p2_world, color in self.grid.segments:
+            p1_cam = view_matrix.transform_point(p1_world)
+            p2_cam = view_matrix.transform_point(p2_world)
+            
+            # Simple Clipping behind camera
+            if p1_cam.vz <= 0 or p2_cam.vz <= 0: continue
+            
+            # Project
+            x1 = round(larg // 2 + p1_cam.vx * d / p1_cam.vz)
+            y1 = round((haut + 1) // 2 - 1 - p1_cam.vy * d / p1_cam.vz)
+            x2 = round(larg // 2 + p2_cam.vx * d / p2_cam.vz)
+            y2 = round((haut + 1) // 2 - 1 - p2_cam.vy * d / p2_cam.vz)
+            
+            line = Modele.DroiteMilieu(color)
+            line.ajouterControle((x1, y1))
+            line.ajouterControle((x2, y2))
+            self.ajouterCourbe(line)
+
+        if self.scene is None: return
 
         if mode == 'zbuffer':
             if self.zbuffer is None:
@@ -458,29 +444,17 @@ class ControleurCourbes(object):
             self.zbuffer = None
 
         d = self.scene.d
-        view_matrix = self.camera.get_view_matrix()
-
         self.transformed_vertices_3d = []  
         self.projected_vertices_2d = [] 
-        self.courbes = []  
-
-        if self.scene is None:
-            return
-
-        if mode == 'zbuffer':
-            if self.zbuffer is None:
-                self.zbuffer = Modele.ZBuffer()
-            self.zbuffer.alloc_init_zbuffer(larg, haut)
-        else:
-            self.zbuffer = None 
-
-        d = self.scene.d
-        view_matrix = self.camera.get_view_matrix()
 
         for indcptobj_stored, (obj, obj_texture) in enumerate(self.loaded_objects):
-            center = obj.get_center()
-            center_translation = matrix.Matrix4.create_translation(vecteur3.Vecteur(-center.vx, -center.vy, -center.vz))
-            transform_matrix = center_translation * view_matrix
+            # OLD Logic: Recenter object
+            # center = obj.get_center()
+            # center_translation = matrix.Matrix4.create_translation(vecteur3.Vecteur(-center.vx, -center.vy, -center.vz))
+            # transform_matrix = center_translation * view_matrix
+            
+            # NEW Logic: Object is already World Centered on Import. View Matrix handles everything.
+            transform_matrix = view_matrix
 
             for som_coords in obj.listesommets:
                 v = vecteur3.Vecteur(som_coords[0], som_coords[1], som_coords[2])
@@ -539,7 +513,19 @@ class ControleurCourbes(object):
         if len(fic) > 0:
             indcptobj = 0
             obj_texture = donnees.ajoute_objet(fic, indcptobj)
-            self.loaded_objects = [(self.scene.listeobjets[indcptobj], obj_texture)] 
+            
+            # Recenter Object ONCE on import
+            obj = self.scene.listeobjets[indcptobj]
+            center = obj.get_center()
+            
+            # Update all vertices
+            for i in range(len(obj.listesommets)):
+                # listesommets is list of [x, y, z] (not Vecteur objects yet)
+                obj.listesommets[i][0] -= center.vx
+                obj.listesommets[i][1] -= center.vy
+                obj.listesommets[i][2] -= center.vz
+            
+            self.loaded_objects = [(obj, obj_texture)] 
 
             self.current_rendering_mode = 'fildefer' 
             self.rebuild_courbes(larg, haut)

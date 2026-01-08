@@ -115,10 +115,22 @@ class VueCourbes(object):
         if self.middle_mouse_pressed and self.last_mouse_pos:
             dx = event.x - self.last_mouse_pos[0]
             dy = event.y - self.last_mouse_pos[1]
-            if event.state & 0x4: 
-                self.controleur.zoom_camera(dy) 
+            
+            # State masks (Tkinter specific)
+            # Shift = 0x1 (1)
+            # Ctrl = 0x4 (4)
+            # Alt = 0x20000 (131072) or similar? Depends on OS. usually we check bit 0, 2 etc.
+            
+            is_shift = (event.state & 0x1) != 0
+            is_ctrl = (event.state & 0x4) != 0
+            
+            if is_shift:
+                self.controleur.pan_camera(dx, dy)
+            elif is_ctrl:
+                self.controleur.zoom_camera(dy)
             else:
                 self.controleur.rotate_camera(dx, dy)
+                
             self.last_mouse_pos = (event.x, event.y)
             self.majAffichage()
 
@@ -267,7 +279,7 @@ class VueCourbes(object):
                                              self.selection_current[0], self.selection_current[1],
                                              outline='white', dash=(4, 4), width=1, tags="ui_overlay")
 
-            # Determine colors
+            # Status
             theme_color = 'blue' if self.controleur.mode == 'edit' else 'black'
             
             # --- Bottom Left Status (History) ---
