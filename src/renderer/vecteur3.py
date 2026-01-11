@@ -12,6 +12,30 @@ class Vecteur():
         self.vy = y
         self.vz = z
 
+    @property
+    def x(self) -> float:
+        return self.vx
+    
+    @x.setter
+    def x(self, value: float):
+        self.vx = value
+
+    @property
+    def y(self) -> float:
+        return self.vy
+    
+    @y.setter
+    def y(self, value: float):
+        self.vy = value
+
+    @property
+    def z(self) -> float:
+        return self.vz
+    
+    @z.setter
+    def z(self, value: float):
+        self.vz = value
+
     def __add__(self, v: Vecteur) -> Vecteur:
         vres = Vecteur()
         vres.vx = self.vx + v.vx
