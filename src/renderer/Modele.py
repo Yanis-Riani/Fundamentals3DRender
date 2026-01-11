@@ -627,10 +627,10 @@ class RenderedTriangle(Courbe):
         
         cross_product = vec1.produitVectoriel(vec2)
         
-        A = cross_product.x
-        B = cross_product.y
-        C = cross_product.z
-        D = -(A * v0_3d.x + B * v0_3d.y + C * v0_3d.z)
+        A = cross_product.vx
+        B = cross_product.vy
+        C = cross_product.vz
+        D = -(A * v0_3d.vx + B * v0_3d.vy + C * v0_3d.vz)
 
         self.facette_properties.normaleetplan = [A, B, C, D]
         
