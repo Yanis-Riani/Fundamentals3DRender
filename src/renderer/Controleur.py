@@ -37,6 +37,7 @@ class ControleurCourbes(object):
         
         # Multi-selection: Set of (object_index, vertex_index)
         self.selected_vertices: Set[Tuple[int, int]] = set()
+        self.visible_vertices: Set[int] = set()
         
         self.vue_ref: Any = vue_ref 
         
@@ -87,6 +88,7 @@ class ControleurCourbes(object):
             hit_found = None; obj_idx = 0 
             if obj_idx < len(self.loaded_objects):
                 for v_idx, proj_v in enumerate(self.projected_vertices_2d):
+                    if self.current_rendering_mode in ['peintre', 'zbuffer'] and v_idx not in self.visible_vertices: continue
                     xc, yc = proj_v
                     if abs(xc - xp) < 8 and abs(yc - yp) < 8: hit_found = (obj_idx, v_idx); break
             if hit_found:
@@ -105,6 +107,7 @@ class ControleurCourbes(object):
         if y1 > y2: y1, y2 = y2, y1
         obj_idx = 0; new_selection = set()
         for v_idx, proj_v in enumerate(self.projected_vertices_2d):
+            if self.current_rendering_mode in ['peintre', 'zbuffer'] and v_idx not in self.visible_vertices: continue
             xc, yc = proj_v
             if x1 <= xc <= x2 and y1 <= yc <= y2: new_selection.add((obj_idx, v_idx))
         if shift: self.selected_vertices.update(new_selection)
@@ -236,6 +239,8 @@ class ControleurCourbes(object):
             self.zbuffer.alloc_init_zbuffer(larg, haut)
         else: self.zbuffer = None
         self.transformed_vertices_3d, self.projected_vertices_2d = [], []
+        self.visible_vertices = set()
+        vertex_offset = 0
         use_culling, faces_to_render = (mode in ['peintre', 'zbuffer']), []
         for obj, obj_tex in self.loaded_objects:
             obj_vertices_cam, obj_projected_2d = [], []
@@ -248,6 +253,9 @@ class ControleurCourbes(object):
                 v_i = obj.listeindicestriangle[i]; p0_cam, p1_cam, p2_cam = [obj_vertices_cam[idx-1] for idx in v_i]
                 if not use_culling or (p1_cam - p0_cam).produitVectoriel(p2_cam - p0_cam).produitScalaire(-p0_cam) > 0:
                     faces_to_render.append({'obj': obj, 'face_idx': i, 'z': (p0_cam.vz + p1_cam.vz + p2_cam.vz) / 3.0, 'p2d': [obj_projected_2d[idx-1] for idx in v_i], 'color': obj.listecouleurs[i]})
+                    if use_culling:
+                        for idx in v_i: self.visible_vertices.add(vertex_offset + idx - 1)
+            vertex_offset += len(obj.listesommets)
         faces_to_render.sort(key=lambda f: f['z'], reverse=True)
         for f in faces_to_render:
             if mode == 'fildefer':

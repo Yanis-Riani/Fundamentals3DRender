@@ -182,13 +182,13 @@ class VueCourbes(object):
             self.imageDraw.rectangle([0, 0, self.largeur, self.hauteur], fill='lightgrey')
             self.controleur.rebuild_courbes(self.largeur, self.hauteur)
             
-            # 1. Draw Solid Faces
-            for pts, color in self.controleur.solid_faces_2d:
-                self.imageDraw.polygon(pts, fill=color, outline=None)
-
-            # 2. Draw Grid Lines
+            # 1. Draw Grid Lines
             for x1, y1, x2, y2, color in self.controleur.grid_lines_2d:
                 self.imageDraw.line([(x1, y1), (x2, y2)], fill=color)
+
+            # 2. Draw Solid Faces
+            for pts, color in self.controleur.solid_faces_2d:
+                self.imageDraw.polygon(pts, fill=color, outline=None)
 
             # 3. Draw Wireframe Lines
             for x1, y1, x2, y2, color in self.controleur.wireframe_lines_2d:
@@ -202,6 +202,8 @@ class VueCourbes(object):
             # 5. Draw Edit Mode Vertices (Small circles)
             if self.controleur.mode == 'edit':
                 for obj_idx, v_idx in enumerate(range(len(self.controleur.projected_vertices_2d))):
+                    if self.controleur.current_rendering_mode in ['peintre', 'zbuffer'] and v_idx not in self.controleur.visible_vertices:
+                        continue
                     pos = self.controleur.projected_vertices_2d[v_idx]
                     is_selected = (0, v_idx) in self.controleur.selected_vertices
                     color = (0, 255, 255) if is_selected else (0, 0, 0) # Light blue or black
