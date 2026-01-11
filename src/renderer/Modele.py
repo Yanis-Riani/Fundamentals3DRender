@@ -667,20 +667,24 @@ class RenderedTriangle(Courbe):
                 xD = edgeD.x
                 for x in range(xG, xD + 1):
                     # Calculate 3D point M3D using inverse perspective projection
-                    if (A * x + B * y + C * d) == 0: continue # Avoid division by zero
-                    t = -D / (A * x + B * y + C * d)
-                    M3D = (t * x, t * y, t * d)
-                    coul = self.calculercouleur(M3D, self.scene)
-
-                    posx = self.larg // 2 + x
-                    posy = (self.haut + 1) // 2 - 1 - y
+                    x_cam = x - self.larg // 2
+                    y_cam = (self.haut + 1) // 2 - 1 - y
+                    
+                    if (A * x_cam + B * y_cam + C * d) == 0: continue # Avoid division by zero
+                    t = -D / (A * x_cam + B * y_cam + C * d)
+                    M3D = (t * x_cam, t * y_cam, t * d)
+                    
+                    posx = x
+                    posy = y
 
                     if 0 <= posx < self.larg and 0 <= posy < self.haut:
                         if self.zbuffer is not None: # Only perform Z-buffering if zbuffer is provided
                             if (M3D[2] > 0 and M3D[2] < self.zbuffer.acces(posx, posy)):
                                 self.zbuffer.modif(posx, posy, M3D[2])
+                                coul = self.calculercouleur(M3D, self.scene)
                                 dessinerPoint((posx, posy), coul)
                         else: # No Z-buffer, just draw
+                            coul = self.calculercouleur(M3D, self.scene)
                             dessinerPoint((posx, posy), coul)
                 edgeG.maj()
                 edgeD.maj()
@@ -693,19 +697,22 @@ class RenderedTriangle(Courbe):
                 xG = edgeG.x
                 xD = edgeD.x
                 for x in range(xG, xD + 1):
-                    if (A * x + B * y + C * d) == 0: continue
-                    t = -D / (A * x + B * y + C * d)
-                    M3D = (t * x, t * y, t * d)
-                    coul = self.calculercouleur(M3D, self.scene)
-
-                    posx = self.larg // 2 + x
-                    posy = (self.haut + 1) // 2 - 1 - y
+                    x_cam = x - self.larg // 2
+                    y_cam = (self.haut + 1) // 2 - 1 - y
+                    
+                    if (A * x_cam + B * y_cam + C * d) == 0: continue
+                    t = -D / (A * x_cam + B * y_cam + C * d)
+                    M3D = (t * x_cam, t * y_cam, t * d)
+                    posx = x
+                    posy = y
                     if 0 <= posx < self.larg and 0 <= posy < self.haut:
                         if self.zbuffer is not None: # Only perform Z-buffering if zbuffer is provided
                             if (M3D[2] > 0 and M3D[2] < self.zbuffer.acces(posx, posy)):
                                 self.zbuffer.modif(posx, posy, M3D[2])
+                                coul = self.calculercouleur(M3D, self.scene)
                                 dessinerPoint((posx, posy), coul)
                         else: # No Z-buffer, just draw
+                            coul = self.calculercouleur(M3D, self.scene)
                             dessinerPoint((posx, posy), coul)
                 edgeG.maj()
                 edgeD.maj()
@@ -728,19 +735,22 @@ class RenderedTriangle(Courbe):
                 xG = edgeG.x
                 xD = edgeD.x
                 for x in range(xG, xD + 1):
-                    if (A * x + B * y + C * d) == 0: continue
-                    t = -D / (A * x + B * y + C * d)
-                    M3D = (t * x, t * y, t * d)
-                    coul = self.calculercouleur(M3D, self.scene)
-
-                    posx = self.larg // 2 + x
-                    posy = (self.haut + 1) // 2 - 1 - y
+                    x_cam = x - self.larg // 2
+                    y_cam = (self.haut + 1) // 2 - 1 - y
+                    
+                    if (A * x_cam + B * y_cam + C * d) == 0: continue
+                    t = -D / (A * x_cam + B * y_cam + C * d)
+                    M3D = (t * x_cam, t * y_cam, t * d)
+                    posx = x
+                    posy = y
                     if 0 <= posx < self.larg and 0 <= posy < self.haut:
                         if self.zbuffer is not None: # Only perform Z-buffering if zbuffer is provided
                             if (M3D[2] > 0 and M3D[2] < self.zbuffer.acces(posx, posy)):
                                 self.zbuffer.modif(posx, posy, M3D[2])
+                                coul = self.calculercouleur(M3D, self.scene)
                                 dessinerPoint((posx, posy), coul)
                         else: # No Z-buffer, just draw
+                            coul = self.calculercouleur(M3D, self.scene)
                             dessinerPoint((posx, posy), coul)
                 edgeG.maj()
                 edgeD.maj()
@@ -753,19 +763,22 @@ class RenderedTriangle(Courbe):
                 xG = edgeG.x
                 xD = edgeD.x
                 for x in range(xG, xD + 1):
-                    if (A * x + B * y + C * d) == 0: continue
-                    t = -D / (A * x + B * y + C * d)
-                    M3D = (t * x, t * y, t * d)
-                    coul = self.calculercouleur(M3D, self.scene)
-
-                    posx = self.larg // 2 + x
-                    posy = (self.haut + 1) // 2 - 1 - y
+                    x_cam = x - self.larg // 2
+                    y_cam = (self.haut + 1) // 2 - 1 - y
+                    
+                    if (A * x_cam + B * y_cam + C * d) == 0: continue
+                    t = -D / (A * x_cam + B * y_cam + C * d)
+                    M3D = (t * x_cam, t * y_cam, t * d)
+                    posx = x
+                    posy = y
                     if 0 <= posx < self.larg and 0 <= posy < self.haut:
                         if self.zbuffer is not None: # Only perform Z-buffering if zbuffer is provided
                             if (M3D[2] > 0 and M3D[2] < self.zbuffer.acces(posx, posy)):
                                 self.zbuffer.modif(posx, posy, M3D[2])
+                                coul = self.calculercouleur(M3D, self.scene)
                                 dessinerPoint((posx, posy), coul)
                         else: # No Z-buffer, just draw
+                            coul = self.calculercouleur(M3D, self.scene)
                             dessinerPoint((posx, posy), coul)
                 edgeG.maj()
                 edgeD.maj()
