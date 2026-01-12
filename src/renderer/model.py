@@ -2,9 +2,9 @@ from __future__ import annotations
 from typing import List, Tuple, Callable, Any, Optional
 
 from . import edge
-from . import vecteur3
+from . import vector3
 # This import is just for type annotation to avoid circular dependencies at runtime
-from .Import_scene import SceneData, Polyhedron
+from .import_scene import SceneData, Polyhedron
 
 # Type aliases for clarity
 Point2D = Tuple[int, int]
@@ -235,7 +235,7 @@ class FaceProperties():
 
 class RenderedTriangle(Curve):
     def __init__(self, polyhedron_ref: Polyhedron, triangle_face_index: int,
-                 transformed_vertices_3d: List[vecteur3.Vector3],
+                 transformed_vertices_3d: List[vector3.Vector3],
                  projected_vertices_2d: List[Point2D],
                  scene_ref: SceneData,
                  zbuffer_ref: Optional[ZBuffer],
@@ -281,7 +281,7 @@ class RenderedTriangle(Curve):
                 else:
                     return [1, 2, 0]
 
-    def _get_vertex_data(self, local_vertex_index: int) -> Tuple[Point2D, vecteur3.Vector3, vecteur3.Vector3, Tuple[float, float]]:
+    def _get_vertex_data(self, local_vertex_index: int) -> Tuple[Point2D, vector3.Vector3, vector3.Vector3, Tuple[float, float]]:
         v_idx_0based = self.vertex_indices[local_vertex_index] - 1
         n_idx_0based = (self.normal_indices[local_vertex_index] - 1) if self.normal_indices else -1
         t_idx_0based = (self.texture_indices[local_vertex_index] - 1) if self.texture_indices else -1
@@ -290,14 +290,14 @@ class RenderedTriangle(Curve):
         p3d = self.transformed_vertices_3d[v_idx_0based]
 
         normal_data = self.polyhedron.normals[n_idx_0based] if 0 <= n_idx_0based < len(self.polyhedron.normals) else [0.0, 0.0, 0.0]
-        normal = vecteur3.Vector3(normal_data[0], normal_data[1], normal_data[2])
+        normal = vector3.Vector3(normal_data[0], normal_data[1], normal_data[2])
 
         tex_coord = self.polyhedron.texture_coords[t_idx_0based] if 0 <= t_idx_0based < len(self.polyhedron.texture_coords) else (0.0, 0.0)
 
         return p2d, p3d, normal, tex_coord
 
-    def interpolate_triangle(self, P1: vecteur3.Vector3, P2: vecteur3.Vector3, P3: vecteur3.Vector3, N1: vecteur3.Vector3, N2: vecteur3.Vector3, N3: vecteur3.Vector3, M3D: vecteur3.Vector3) -> vecteur3.Vector3:
-        N = vecteur3.Vector3()
+    def interpolate_triangle(self, P1: vector3.Vector3, P2: vector3.Vector3, P3: vector3.Vector3, N1: vector3.Vector3, N2: vector3.Vector3, N3: vector3.Vector3, M3D: vector3.Vector3) -> vector3.Vector3:
+        N = vector3.Vector3()
         eps = 0.0001
 
         if ((P3.y - M3D.y) * (P2.y - M3D.y)) >= 0:
@@ -355,8 +355,8 @@ class RenderedTriangle(Curve):
 
         return N.normalize() if N.norm() > 0.00001 else N1
 
-    def interpolate_triangle_textured(self, P1: vecteur3.Vector3, P2: vecteur3.Vector3, P3: vecteur3.Vector3, N1: vecteur3.Vector3, N2: vecteur3.Vector3, N3: vecteur3.Vector3, T1: Tuple[float, float], T2: Tuple[float, float], T3: Tuple[float, float], M3D: vecteur3.Vector3) -> Tuple[vecteur3.Vector3, Tuple[float, float]]:
-        N = vecteur3.Vector3()
+    def interpolate_triangle_textured(self, P1: vector3.Vector3, P2: vector3.Vector3, P3: vector3.Vector3, N1: vector3.Vector3, N2: vector3.Vector3, N3: vector3.Vector3, T1: Tuple[float, float], T2: Tuple[float, float], T3: Tuple[float, float], M3D: vector3.Vector3) -> Tuple[vector3.Vector3, Tuple[float, float]]:
+        N = vector3.Vector3()
         T = T1
         eps = 0.0001
 
@@ -447,9 +447,9 @@ class RenderedTriangle(Curve):
         n2_vec = n2_vec.normalize()
         n3_vec = n3_vec.normalize()
 
-        N = vecteur3.Vector3()
+        N = vector3.Vector3()
         T_coords = (0.0, 0.0)
-        M3D_vec = vecteur3.Vector3(M3D[0], M3D[1], M3D[2])
+        M3D_vec = vector3.Vector3(M3D[0], M3D[1], M3D[2])
 
         if self.face_properties.texture_on:
             _, _, _, T1 = self._get_vertex_data(0)
@@ -481,7 +481,7 @@ class RenderedTriangle(Curve):
         coulB = self.scene.ambient_intensity * self.face_properties.coeffs[0] * cb
 
         for lum in self.scene.lights:
-            L = (vecteur3.Vector3(lum[0], lum[1], lum[2]) - M3D_vec).normalize()
+            L = (vector3.Vector3(lum[0], lum[1], lum[2]) - M3D_vec).normalize()
             costheta = L.dot_product(N)
             if costheta > 0:
                 val = lum[3] * self.face_properties.coeffs[1] * costheta

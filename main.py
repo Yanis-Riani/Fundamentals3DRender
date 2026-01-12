@@ -1,4 +1,4 @@
-from src.renderer.Vue import CurveView
+from src.renderer.view import CurveView
 
 if __name__ == "__main__":
     # Create the view

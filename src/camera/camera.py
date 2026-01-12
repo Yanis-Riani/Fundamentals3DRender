@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import math
 
-from ..renderer import vecteur3
+from ..renderer import vector3
 from . import matrix
 
 
@@ -11,9 +11,9 @@ class Camera:
         self.distance = distance
         self.azimuth = math.pi / 4  # Top-Right perspective
         self.elevation = math.pi / 6    # Looking slightly down
-        self.target = vecteur3.Vector3(0.0, 0.0, 0.0)
-        self.world_up = vecteur3.Vector3(0.0, 1.0, 0.0)
-        self.position = vecteur3.Vector3(0.0, 0.0, self.distance)
+        self.target = vector3.Vector3(0.0, 0.0, 0.0)
+        self.world_up = vector3.Vector3(0.0, 1.0, 0.0)
+        self.position = vector3.Vector3(0.0, 0.0, self.distance)
         self.update_position()
 
     def update_position(self) -> None:
@@ -22,7 +22,7 @@ class Camera:
         x = self.target.x + self.distance * math.cos(self.elevation) * math.sin(self.azimuth)
         y = self.target.y + self.distance * math.sin(self.elevation)
         z = self.target.z + self.distance * math.cos(self.elevation) * math.cos(self.azimuth)
-        self.position = vecteur3.Vector3(x, y, z)
+        self.position = vector3.Vector3(x, y, z)
 
     def get_view_matrix(self) -> matrix.Matrix4:
         # Determine Up vector based on elevation to avoid flipping at poles
@@ -32,7 +32,7 @@ class Camera:
 
         up_vector = self.world_up
         if normalized_elevation < -math.pi/2 or normalized_elevation > math.pi/2:
-            up_vector = vecteur3.Vector3(0.0, -1.0, 0.0)
+            up_vector = vector3.Vector3(0.0, -1.0, 0.0)
 
         return matrix.Matrix4.look_at(self.position, self.target, up_vector)
 

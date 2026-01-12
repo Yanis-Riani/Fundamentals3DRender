@@ -3,23 +3,23 @@ from typing import List, Tuple, Any
 import os
 import tkinter.filedialog
 from PIL import Image
-from . import vecteur3
+from . import vector3
 
 ASSETS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "assets")
 
 
 class Polyhedron:
-    def get_center(self) -> vecteur3.Vector3:
+    def get_center(self) -> vector3.Vector3:
         """Calculates the geometric center of the object's vertices."""
         if not self.vertices:
-            return vecteur3.Vector3(0, 0, 0)
+            return vector3.Vector3(0, 0, 0)
         
         sum_x = sum(v[0] for v in self.vertices)
         sum_y = sum(v[1] for v in self.vertices)
         sum_z = sum(v[2] for v in self.vertices)
         
         num_vertices = len(self.vertices)
-        return vecteur3.Vector3(sum_x / num_vertices, sum_y / num_vertices, sum_z / num_vertices)
+        return vector3.Vector3(sum_x / num_vertices, sum_y / num_vertices, sum_z / num_vertices)
 
     def __init__(self) -> None:
         self.name: str = ""

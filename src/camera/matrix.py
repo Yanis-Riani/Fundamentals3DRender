@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import List
 
-from ..renderer import vecteur3
+from ..renderer import vector3
 
 
 class Matrix4:
@@ -28,7 +28,7 @@ class Matrix4:
                 result.mat[i][j] = sum_val
         return result
 
-    def transform_point(self, p: vecteur3.Vector3) -> vecteur3.Vector3:
+    def transform_point(self, p: vector3.Vector3) -> vector3.Vector3:
         # Assumes p is a point, so w = 1
         x = p.x * self.mat[0][0] + p.y * self.mat[1][0] + p.z * self.mat[2][0] + self.mat[3][0]
         y = p.x * self.mat[0][1] + p.y * self.mat[1][1] + p.z * self.mat[2][1] + self.mat[3][1]
@@ -40,7 +40,7 @@ class Matrix4:
             y /= w
             z /= w
 
-        return vecteur3.Vector3(x, y, z)
+        return vector3.Vector3(x, y, z)
 
     def transpose(self) -> Matrix4:
         result = Matrix4()
@@ -69,7 +69,7 @@ class Matrix4:
                 result.mat[i][j] = self.mat[j][i]
         
         # Calculate -R^T * t
-        t_vec = vecteur3.Vector3(self.mat[3][0], self.mat[3][1], self.mat[3][2])
+        t_vec = vector3.Vector3(self.mat[3][0], self.mat[3][1], self.mat[3][2])
         
         # Apply R^T to -t
         inv_t_x = -(result.mat[0][0] * t_vec.x + result.mat[1][0] * t_vec.y + result.mat[2][0] * t_vec.z)
@@ -89,7 +89,7 @@ class Matrix4:
         return result
 
     @staticmethod
-    def look_at(eye: vecteur3.Vector3, target: vecteur3.Vector3, up: vecteur3.Vector3) -> Matrix4:
+    def look_at(eye: vector3.Vector3, target: vector3.Vector3, up: vector3.Vector3) -> Matrix4:
         zaxis = (target - eye).normalize() # Forward (+Z in camera space)
         xaxis = (up.cross_product(zaxis)).normalize() # Camera Right
         yaxis = zaxis.cross_product(xaxis).normalize() # Camera Up
@@ -118,7 +118,7 @@ class Matrix4:
         return m
 
     @staticmethod
-    def create_translation(t: vecteur3.Vector3) -> Matrix4:
+    def create_translation(t: vector3.Vector3) -> Matrix4:
         m = Matrix4.identity()
         m.mat[3][0] = t.x
         m.mat[3][1] = t.y
