@@ -11,18 +11,18 @@ class Camera:
         self.distance = distance
         self.azimuth = math.pi / 4  # Top-Right perspective
         self.elevation = math.pi / 6    # Looking slightly down
-        self.target = vecteur3.Vecteur(0.0, 0.0, 0.0)
-        self.world_up = vecteur3.Vecteur(0.0, 1.0, 0.0)
-        self.position = vecteur3.Vecteur(0.0, 0.0, self.distance)
+        self.target = vecteur3.Vector3(0.0, 0.0, 0.0)
+        self.world_up = vecteur3.Vector3(0.0, 1.0, 0.0)
+        self.position = vecteur3.Vector3(0.0, 0.0, self.distance)
         self.update_position()
 
     def update_position(self) -> None:
         # Spherical to Cartesian coordinates
         # Position is relative to Target
-        x = self.target.vx + self.distance * math.cos(self.elevation) * math.sin(self.azimuth)
-        y = self.target.vy + self.distance * math.sin(self.elevation)
-        z = self.target.vz + self.distance * math.cos(self.elevation) * math.cos(self.azimuth)
-        self.position = vecteur3.Vecteur(x, y, z)
+        x = self.target.x + self.distance * math.cos(self.elevation) * math.sin(self.azimuth)
+        y = self.target.y + self.distance * math.sin(self.elevation)
+        z = self.target.z + self.distance * math.cos(self.elevation) * math.cos(self.azimuth)
+        self.position = vecteur3.Vector3(x, y, z)
 
     def get_view_matrix(self) -> matrix.Matrix4:
         # Determine Up vector based on elevation to avoid flipping at poles
@@ -32,7 +32,7 @@ class Camera:
 
         up_vector = self.world_up
         if normalized_elevation < -math.pi/2 or normalized_elevation > math.pi/2:
-            up_vector = vecteur3.Vecteur(0.0, -1.0, 0.0)
+            up_vector = vecteur3.Vector3(0.0, -1.0, 0.0)
 
         return matrix.Matrix4.look_at(self.position, self.target, up_vector)
 
@@ -53,24 +53,16 @@ class Camera:
         """Moves the camera target (and position) laterally."""
         # Calculate Forward, Right, Up vectors
         # Forward is Target - Position
-        forward = (self.target - self.position).normer()
+        forward = (self.target - self.position).normalize()
         
         # Right is Cross(Forward, WorldUp)
-        # Note: vecteur3.dot is cross product alias
-        right = forward.produitVectoriel(self.world_up).normer()
+        right = forward.cross_product(self.world_up).normalize()
         
         # Up_Cam is Cross(Right, Forward)
-        up_cam = right.produitVectoriel(forward).normer()
+        up_cam = right.cross_product(forward).normalize()
         
         # Sensitivity scales with distance (further away = faster pan)
         sensitivity = self.distance * 0.001
-        
-        # Move target
-        # -dx moves Right (screen space logic: drag left = move camera right? No, drag left moves view left)
-        # Blender: Shift+Middle Drag Right -> View moves Right (Target moves Left relative to camera? No, Target moves Right)
-        # Let's try direct mapping first.
-        # -dx because typically dragging "world" means moving camera opposite?
-        # Actually usually Pan follows mouse. Mouse Right -> Target Right.
         
         move_vec = (right * (-dx * sensitivity)) + (up_cam * (dy * sensitivity))
         

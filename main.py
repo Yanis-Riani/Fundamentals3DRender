@@ -1,7 +1,7 @@
-from src.renderer.Vue import VueCourbes
+from src.renderer.Vue import CurveView
 
 if __name__ == "__main__":
-    # cree la vue
-    vue = VueCourbes(800, 600)
-    # lance le programme
-    vue.executer()
+    # Create the view
+    view = CurveView(800, 600)
+    # Run the program
+    view.run()

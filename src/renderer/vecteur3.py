@@ -2,7 +2,7 @@ from __future__ import annotations
 import math
 
 
-class Vecteur():
+class Vector3():
     vx: float
     vy: float
     vz: float
@@ -36,51 +36,47 @@ class Vecteur():
     def z(self, value: float):
         self.vz = value
 
-    def __add__(self, v: Vecteur) -> Vecteur:
-        vres = Vecteur()
+    def __add__(self, v: Vector3) -> Vector3:
+        vres = Vector3()
         vres.vx = self.vx + v.vx
         vres.vy = self.vy + v.vy
         vres.vz = self.vz + v.vz
         return vres
 
-    def __sub__(self, v: Vecteur) -> Vecteur:
-        vres = Vecteur()
+    def __sub__(self, v: Vector3) -> Vector3:
+        vres = Vector3()
         vres.vx = self.vx - v.vx
         vres.vy = self.vy - v.vy
         vres.vz = self.vz - v.vz
         return vres
 
-    def __mul__(self, v: Vecteur | float | int) -> float | Vecteur:
+    def __mul__(self, v: Vector3 | float | int) -> float | Vector3:
         if isinstance(v, (float, int)):
-            vres = Vecteur()
+            vres = Vector3()
             vres.vx = self.vx * v
             vres.vy = self.vy * v
             vres.vz = self.vz * v
             return vres
         return self.vx * v.vx + self.vy * v.vy + self.vz * v.vz
 
-    def dot(self, v: Vecteur) -> Vecteur:
-        """This is the cross product. KEPT FOR COMPATIBILITY."""
-        vres = Vecteur()
+    def cross_product(self, v: Vector3) -> Vector3:
+        """Calculates the cross product of two vectors."""
+        vres = Vector3()
         vres.vx = self.vy * v.vz - self.vz * v.vy
         vres.vy = -(self.vx * v.vz - self.vz * v.vx)
         vres.vz = self.vx * v.vy - self.vy * v.vx
         return vres
 
-    def produitVectoriel(self, v: Vecteur) -> Vecteur:
-        """Alias for cross product, used in Modele.py"""
-        return self.dot(v)
-
-    def produitScalaire(self, v: Vecteur) -> float:
-        """Alias for dot product"""
+    def dot_product(self, v: Vector3) -> float:
+        """Calculates the dot product of two vectors."""
         return self.__mul__(v)
 
-    def __neg__(self) -> Vecteur:
+    def __neg__(self) -> Vector3:
         """Returns the negation of the vector."""
-        return Vecteur(-self.vx, -self.vy, -self.vz)
+        return Vector3(-self.vx, -self.vy, -self.vz)
 
-    def __rmul__(self, k: float) -> Vecteur:
-        vres = Vecteur()
+    def __rmul__(self, k: float) -> Vector3:
+        vres = Vector3()
         vres.vx = self.vx * k
         vres.vy = self.vy * k
         vres.vz = self.vz * k
@@ -89,9 +85,9 @@ class Vecteur():
     def norm(self) -> float:
         return math.sqrt(self.vx * self.vx + self.vy * self.vy + self.vz * self.vz)
 
-    def normer(self) -> Vecteur:
+    def normalize(self) -> Vector3:
         norm_val = self.norm()
         if norm_val == 0:
-            return Vecteur()
+            return Vector3()
         val = 1 / norm_val
         return self.__rmul__(val)
