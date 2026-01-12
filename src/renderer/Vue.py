@@ -154,11 +154,11 @@ class VueCourbes(object):
             else: self.controleur.ui_mode_apply(self.largeur, self.hauteur); self.majAffichage()
         elif key == 'escape': self.controleur.cancel_transform()
         elif key == 'up' or raw_key == 'Up':
-            self.controleur.ui_mode_cycle(1); self.majAffichage()
-        elif key == 'down' or raw_key == 'Down':
             self.controleur.ui_mode_cycle(-1); self.majAffichage()
-            
-    def callbackMotion(self, event: tkinter.Event) -> None:
+        elif key == 'down' or raw_key == 'Down':
+            self.controleur.ui_mode_cycle(1); self.majAffichage()
+
+    def callbackMotion(self, event: tkinter.Event) -> None:        
         if self.controleur.transform_state["active"]: self.controleur.update_transform(event.x, event.y); return
         if self.selection_start: self.selection_current = (event.x, event.y); self.majAffichage()
 
@@ -306,13 +306,6 @@ class VueCourbes(object):
                         command=functools.partial(self.callback_load_example, file_path)
                     )
         
-        # 3. Render Mode
-        render_mode_menu = tkinter.Menu(menu, tearoff=0)
-        menu.add_cascade(label="Render Mode", menu=render_mode_menu)
-        render_mode_menu.add_command(label="Wireframe", command=lambda: self.callback_set_mode('fildefer'))
-        render_mode_menu.add_command(label="Solid", command=lambda: self.callback_set_mode('peintre'))
-        render_mode_menu.add_command(label="Render (Z-Buffer)", command=lambda: self.callback_set_mode('zbuffer'))
-
         self.canvas = tkinter.Canvas(fenetre, width=self.largeur, height=self.hauteur, bg='white', highlightthickness=0, borderwidth=0)
         self.canvas.bind("<Button-1>", self.callbackButton1); self.canvas.bind("<ButtonRelease-1>", self.callbackButtonRelease1); self.canvas.bind("<Button-3>", self.callbackButton3); self.canvas.bind("<ButtonRelease-3>", self.callbackButtonRelease3); self.canvas.bind("<Button-2>", self.callbackButton2); self.canvas.bind("<ButtonRelease-2>", self.callbackButtonRelease2); self.canvas.bind("<B2-Motion>", self.callbackB2Motion); self.canvas.bind("<MouseWheel>", self.callbackMouseWheel); self.canvas.bind("<Key-Tab>", self.callbackToggleMode)
         self.canvas.bind("<Key>", self.callbackKeyPress); self.canvas.bind("<Motion>", self.callbackMotion); self.canvas.pack(); self.canvas.focus_set()
