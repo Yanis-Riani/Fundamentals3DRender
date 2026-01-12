@@ -85,7 +85,7 @@ class Donnees_scene():
                 poly.nomobj = ligne2.strip()
 
                 if int(ligne1) == 1:  # si le polyedre est texturable
-                    fichiertexture = filedialog.askopenfilename(
+                    fichiertexture = tkinter.filedialog.askopenfilename(
                         title="Associer une texture a l objet?:", initialdir=os.path.join(ASSETS_DIR, "scenes"),
                         filetypes=[("Textures", "*.jpg; *.png; *.bmp")]
                     )
