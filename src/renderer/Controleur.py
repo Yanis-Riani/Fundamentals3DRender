@@ -2,9 +2,9 @@ import os
 
 ASSETS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "assets")
 
-import tkinter.filedialog
 import math
-from typing import Any, Callable, List, Tuple, Optional, Dict, Set
+import tkinter.filedialog
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 
 from ..camera import camera, matrix
 from . import Import_scene, Modele, vecteur3
@@ -45,6 +45,14 @@ class ControleurCourbes(object):
         self.grid_segments: List[Tuple[vecteur3.Vecteur, vecteur3.Vecteur, Couleur]] = []
         self._generate_grid_segments(2000.0, 100.0)
 
+        # UI / Render Mode State
+        self.available_modes: List[Tuple[str, str]] = [
+            ('Wireframe', 'fildefer'), 
+            ('Solid', 'peintre'), 
+            ('Z-Buffer', 'zbuffer')
+        ]
+        self.ui_mode_index: int = 0
+
         # State for Transform
         self.transform_state: Dict[str, Any] = {
             "active": False,
@@ -58,6 +66,19 @@ class ControleurCourbes(object):
 
         self.undo_stack: List[Dict[str, Any]] = []
         self.redo_stack: List[Dict[str, Any]] = []
+
+    def undo_available(self) -> bool: return len(self.undo_stack) > 0
+    def redo_available(self) -> bool: return len(self.redo_stack) > 0
+
+    def ui_mode_cycle(self, direction: int) -> None:
+        """ Cycle through rendering modes in the UI (does not render yet). """
+        self.ui_mode_index = (self.ui_mode_index + direction) % len(self.available_modes)
+
+    def ui_mode_apply(self, larg: int, haut: int) -> None:
+        """ Apply the currently selected UI mode. """
+        mode_key = self.available_modes[self.ui_mode_index][1]
+        if mode_key != self.current_rendering_mode:
+            self.set_rendering_mode(larg, haut, mode_key)
 
     def _generate_grid_segments(self, size: float, step: float) -> None:
         grey = (150, 150, 150)
@@ -214,6 +235,11 @@ class ControleurCourbes(object):
         self.rebuild_courbes(larg, haut); self.vue_ref.majAffichage()
 
     def set_rendering_mode(self, larg: int, haut: int, mode: str) -> None:
+        # Sync UI index only if mode is changing (prevents resetting cursor during redraw)
+        if mode != self.current_rendering_mode:
+            for idx, (_, key) in enumerate(self.available_modes):
+                if key == mode: self.ui_mode_index = idx; break
+        
         self.current_rendering_mode, self.courbes, self.grid_lines_2d, self.wireframe_lines_2d, self.solid_faces_2d = mode, [], [], [], []
         step, grid_range, fog_start, fog_end, bg_rgb, near_z = 100.0, 2000.0, 500.0, 2000.0, (211, 211, 211), 1.0
         target = self.camera.target; center_x, center_z = round(target.vx / step) * step, round(target.vz / step) * step
@@ -277,8 +303,21 @@ class ControleurCourbes(object):
     def importer_objet(self, larg: int, haut: int) -> None:
         donnees = Import_scene.Donnees_scene(os.path.join(ASSETS_DIR, "scenes", "Donnees_scene.sce"))
         self.scene = donnees
-        fic = tkinter.filedialog.askopenfilename(title="Inserer l objet:", initialdir=os.path.join(ASSETS_DIR, "scenes"), filetypes=[("Fichiers Objets", "*.obj")])
+        fic = tkinter.filedialog.askopenfilename(title="Import OBJ", initialdir="", filetypes=[("Wavefront OBJ", "*.obj")])
         if fic:
-            obj_idx = 0; obj_tex = donnees.ajoute_objet(fic, obj_idx); obj = self.scene.listeobjets[obj_idx]; center = obj.get_center()
-            for i in range(len(obj.listesommets)): obj.listesommets[i][0] -= center.vx; obj.listesommets[i][1] -= center.vy; obj.listesommets[i][2] -= center.vz
-            self.loaded_objects = [(obj, obj_tex)]; self.current_rendering_mode = 'fildefer'; self.rebuild_courbes(larg, haut)
+            self._charger_fichier(fic, donnees, larg, haut)
+
+    def importer_objet_direct(self, larg: int, haut: int, chemin: str) -> None:
+        donnees = Import_scene.Donnees_scene(os.path.join(ASSETS_DIR, "scenes", "Donnees_scene.sce"))
+        self.scene = donnees
+        if os.path.exists(chemin):
+            self._charger_fichier(chemin, donnees, larg, haut)
+
+    def _charger_fichier(self, fic: str, donnees: Import_scene.Donnees_scene, larg: int, haut: int) -> None:
+        obj_idx = 0; obj_tex = donnees.ajoute_objet(fic, obj_idx); obj = self.scene.listeobjets[obj_idx]; center = obj.get_center()
+        for i in range(len(obj.listesommets)): obj.listesommets[i][0] -= center.vx; obj.listesommets[i][1] -= center.vy; obj.listesommets[i][2] -= center.vz
+        self.loaded_objects = [(obj, obj_tex)]
+        self.selected_vertices.clear()
+        # Keep current mode if set, otherwise default to wireframe
+        if not self.current_rendering_mode: self.current_rendering_mode = 'fildefer'
+        self.rebuild_courbes(larg, haut)

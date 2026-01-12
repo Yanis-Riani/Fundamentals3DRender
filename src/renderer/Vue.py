@@ -1,10 +1,17 @@
 from __future__ import annotations
+
+import functools
+import os
 import tkinter
-from PIL import ImageTk, Image, ImageDraw, ImageFont
 from tkinter.colorchooser import askcolor
-from typing import List, Tuple, Callable, Any, Optional
+from typing import Any, Callable, List, Optional, Tuple
+
+from PIL import Image, ImageDraw, ImageFont, ImageTk
 
 from . import Controleur
+
+# Global Asset Path Helper
+ASSETS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "assets")
 
 # Type aliases for consistency and clarity
 Point2D = Tuple[int, int]
@@ -118,7 +125,7 @@ class VueCourbes(object):
         self.majAffichage()
         
     def callbackKeyPress(self, event: tkinter.Event) -> None:
-        key = event.keysym.lower(); state = event.state; ctrl_pressed = (state & 0x4) != 0
+        key = event.keysym.lower(); raw_key = event.keysym; state = event.state; ctrl_pressed = (state & 0x4) != 0
         if ctrl_pressed and key == 'z':
             if not self.controleur.transform_state["active"] and self.controleur.get_undo_count() > 0:
                 self.controleur.perform_undo(); self.show_notification("Undo")
@@ -142,8 +149,14 @@ class VueCourbes(object):
         elif key in ['x', 'y', 'z']:
             shift_pressed = (state & 0x1) != 0 
             self.controleur.toggle_axis_constraint(key, shift_pressed)
-        elif key == 'return': self.controleur.confirm_transform()
+        elif key == 'return': 
+            if self.controleur.transform_state["active"]: self.controleur.confirm_transform()
+            else: self.controleur.ui_mode_apply(self.largeur, self.hauteur); self.majAffichage()
         elif key == 'escape': self.controleur.cancel_transform()
+        elif key == 'up' or raw_key == 'Up':
+            self.controleur.ui_mode_cycle(1); self.majAffichage()
+        elif key == 'down' or raw_key == 'Down':
+            self.controleur.ui_mode_cycle(-1); self.majAffichage()
             
     def callbackMotion(self, event: tkinter.Event) -> None:
         if self.controleur.transform_state["active"]: self.controleur.update_transform(event.x, event.y); return
@@ -172,6 +185,10 @@ class VueCourbes(object):
     def callback_importer(self) -> None:
         if self.controleur.transform_state["active"]: self.controleur.cancel_transform()
         self.controleur.importer_objet(self.largeur, self.hauteur); self.majAffichage()
+
+    def callback_load_example(self, file_path: str) -> None:
+        if self.controleur.transform_state["active"]: self.controleur.cancel_transform()
+        self.controleur.importer_objet_direct(self.largeur, self.hauteur, file_path); self.majAffichage()
 
     def callback_set_mode(self, mode: str) -> None:
         if self.controleur.transform_state["active"]: self.controleur.cancel_transform()
@@ -243,18 +260,60 @@ class VueCourbes(object):
                 self.canvas.create_line(x2-radius, y2, x1+radius, y2, fill=theme_color, width=2, tags="ui_overlay")
                 self.canvas.create_arc(x1, y2-2*radius, x1+2*radius, y2, start=180, extent=90, style="arc", outline=theme_color, width=2, tags="ui_overlay")
                 self.canvas.create_line(x1, y2-radius, x1, y1+radius, fill=theme_color, width=2, tags="ui_overlay")
+            
+            # Draw Render Mode Menu (Top Right)
+            menu_x, menu_y = self.largeur - 10, 10
+            for idx, (label, key) in enumerate(self.controleur.available_modes):
+                is_selected = (idx == self.controleur.ui_mode_index)
+                is_active = (key == self.controleur.current_rendering_mode)
+                
+                prefix = "> " if is_selected else "  "
+                suffix = " [ON]" if is_active else ""
+                display_text = f"{prefix}{label}{suffix}"
+                
+                font_weight = "bold" if is_selected else "normal"
+                fill_color = "red" if is_selected else theme_color
+                
+                self.canvas.create_text(menu_x, menu_y + (idx * 15), text=display_text, anchor="ne", fill=fill_color, font=("Consolas", 10, font_weight), tags="ui_overlay")
+
         else: print("Warning: majAffichage called before image or canvas are initialized.")
 
     def executer(self) -> None:
         fenetre = tkinter.Tk(); fenetre.title("ASI1 : TP"); fenetre.resizable(0, 0)
-        menu = tkinter.Menu(fenetre); fenetre.config(menu=menu)
-        filemenu = tkinter.Menu(menu); menu.add_cascade(label="Fichier", menu=filemenu); filemenu.add_command(label="Nouveau", command=self.callbackNouveau); filemenu.add_separator(); filemenu.add_command(label="Quitter", command=fenetre.destroy)
-        menu3D = tkinter.Menu(menu); menu.add_cascade(label="3D", menu=menu3D); menu3D.add_command(label="Importer Objet...", command=self.callback_importer)
-        render_mode_menu = tkinter.Menu(menu3D); menu3D.add_cascade(label="Mode de Rendu", menu=render_mode_menu)
+        
+        # Menu Bar
+        menu = tkinter.Menu(fenetre)
+        fenetre.config(menu=menu)
+        
+        # 1. New
+        menu.add_command(label="New", command=self.callbackNouveau)
+        
+        # 2. Import
+        menu.add_command(label="Import (.obj)", command=self.callback_importer)
+
+        # 2.5 Examples
+        examples_menu = tkinter.Menu(menu, tearoff=0)
+        menu.add_cascade(label="Examples", menu=examples_menu)
+        
+        scenes_dir = os.path.join(ASSETS_DIR, "scenes")
+        if os.path.exists(scenes_dir):
+            for filename in os.listdir(scenes_dir):
+                if filename.lower().endswith(".obj"):
+                    file_path = os.path.join(scenes_dir, filename)
+                    # Use functools.partial to capture the specific file path for each item
+                    examples_menu.add_command(
+                        label=filename, 
+                        command=functools.partial(self.callback_load_example, file_path)
+                    )
+        
+        # 3. Render Mode
+        render_mode_menu = tkinter.Menu(menu, tearoff=0)
+        menu.add_cascade(label="Render Mode", menu=render_mode_menu)
         render_mode_menu.add_command(label="Wireframe", command=lambda: self.callback_set_mode('fildefer'))
-        render_mode_menu.add_command(label="Solide", command=lambda: self.callback_set_mode('peintre'))
-        render_mode_menu.add_command(label="Rendu Final (Z-Buffer)", command=lambda: self.callback_set_mode('zbuffer'))
+        render_mode_menu.add_command(label="Solid", command=lambda: self.callback_set_mode('peintre'))
+        render_mode_menu.add_command(label="Render (Z-Buffer)", command=lambda: self.callback_set_mode('zbuffer'))
+
         self.canvas = tkinter.Canvas(fenetre, width=self.largeur, height=self.hauteur, bg='white', highlightthickness=0, borderwidth=0)
         self.canvas.bind("<Button-1>", self.callbackButton1); self.canvas.bind("<ButtonRelease-1>", self.callbackButtonRelease1); self.canvas.bind("<Button-3>", self.callbackButton3); self.canvas.bind("<ButtonRelease-3>", self.callbackButtonRelease3); self.canvas.bind("<Button-2>", self.callbackButton2); self.canvas.bind("<ButtonRelease-2>", self.callbackButtonRelease2); self.canvas.bind("<B2-Motion>", self.callbackB2Motion); self.canvas.bind("<MouseWheel>", self.callbackMouseWheel); self.canvas.bind("<Key-Tab>", self.callbackToggleMode)
-        fenetre.bind("<Key>", self.callbackKeyPress); self.canvas.bind("<Motion>", self.callbackMotion); self.canvas.pack(); self.canvas.focus_set()
+        self.canvas.bind("<Key>", self.callbackKeyPress); self.canvas.bind("<Motion>", self.callbackMotion); self.canvas.pack(); self.canvas.focus_set()
         self.image = Image.new("RGB", (self.largeur, self.hauteur), 'lightgrey'); self.imageDraw = ImageDraw.Draw(self.image); self.majAffichage(); fenetre.mainloop()
