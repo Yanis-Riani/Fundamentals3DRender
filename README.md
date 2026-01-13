@@ -1,55 +1,55 @@
 # Fundamentals3DRender
 
-This project is a 3D rendering application originally developed as a school project and subsequently enhanced for better usability and features. It provides a graphical interface to import, view, edit, and export 3D models in the Wavefront OBJ format, supporting various rendering techniques like Wireframe, Painter's Algorithm, and Z-Buffer.
+Une application de rendu 3D interactive développée en Python. Initialement conçu comme un projet académique, cet outil a été enrichi pour offrir une interface complète permettant d'importer, de manipuler et d'exporter des modèles au format Wavefront `.obj`. Le moteur supporte plusieurs techniques de rendu classiques (Fil de fer, Algorithme du peintre, Z-Buffer) avec une gestion du shading (Phong/Gouraud) et du texturage.
 
-## Install
+## Installation
 
-1.  Clone the repository
+1.  Cloner le dépôt :
     ```sh
     git clone https://github.com/Yanis-Riani/Fundamentals3DRender.git
     ```
-2.  Install dependencies
+2.  Installer les dépendances :
     ```sh
     pip install -r requirements.txt
     ```
-3.  Run the application
+3.  Lancer l'application :
     ```sh
     python main.py
     ```
 
-## Usage
+## Utilisation
 
-### Managing Models
+### Gestion des Modèles
 
-*   **Import**: Select **"Import (.obj)"** from the menu to load a 3D model. You can also use **"Examples"** to load pre-defined scenes.
-*   **Export**: Select **"Export (.obj)"** to save the currently loaded and modified object to a new OBJ file.
+*   **Import** : Menu **"Import (.obj)"** pour charger un modèle. Le menu **"Examples"** permet de charger rapidement des scènes prédéfinies.
+*   **Export** : Menu **"Export (.obj)"** pour sauvegarder vos modifications dans un nouveau fichier `.obj`.
 
-### Camera Controls
+### Contrôles Caméra
 
-*   **Rotate**: Drag with the **Middle Mouse Button**.
-*   **Pan**: Hold **Shift** + drag with the **Middle Mouse Button**.
-*   **Zoom**: Use the **Mouse Wheel** or hold **Ctrl** + drag with the **Middle Mouse Button**.
+*   **Rotation** : Maintenir le **bouton central** de la souris et glisser.
+*   **Pan (Déplacement)** : **Shift** + **bouton central**.
+*   **Zoom** : **Molette** ou **Ctrl** + **bouton central**.
 
-### Editing Objects
+### Édition d'Objets
 
-*   **Toggle Mode**: Press `Tab` to switch between **Viewer** and **Edit** modes.
-*   **Selection**:
-    *   Click to select a vertex.
-    *   Hold `Shift` to multi-select or drag to box-select.
-*   **Transformations**:
-    *   **Move (Grab)**: Press `G`.
-    *   **Rotate**: Press `R`.
-*   **Constraints**:
-    *   Press `X`, `Y`, or `Z` to constrain to a single axis.
-    *   Press `Shift + X`, `Shift + Y`, or `Shift + Z` to constrain to a plane (e.g., `Shift + Z` locks the Z axis, allowing movement on the XY plane).
-*   **Confirm/Cancel**:
-    *   Press `Enter` or Click to confirm.
-    *   Press `Esc` or Right Click to cancel.
-*   **History**:
-    *   **Undo**: `Ctrl + Z`
-    *   **Redo**: `Ctrl + Y`
+*   **Mode Édition** : Appuyez sur `Tab` pour basculer entre le mode **Viewer** et **Edit**.
+*   **Sélection** :
+    *   Clic gauche pour sélectionner un sommet.
+    *   Maintenir `Shift` pour une sélection multiple ou pour tracer un rectangle de sélection.
+*   **Transformations** :
+    *   **Déplacement (Grab)** : Appuyez sur `G`.
+    *   **Rotation** : Appuyez sur `R`.
+*   **Contraintes d'Axes** :
+    *   `X`, `Y` ou `Z` : Bloque la transformation sur cet axe unique.
+    *   **Shift + X**, **Shift + Y** ou **Shift + Z** : Bloque l'axe choisi pour transformer sur les deux autres (ex: `Shift + X` pour contraindre sur les axes **Y** et **Z**).
+*   **Valider/Annuler** :
+    *   `Entrée` ou Clic gauche pour valider.
+    *   `Échap` ou Clic droit pour annuler.
+*   **Historique** :
+    *   **Undo** : `Ctrl + Z`
+    *   **Redo** : `Ctrl + Y`
 
-### Rendering Modes
+### Modes de Rendu
 
-*   **Cycle Modes**: Use **Up/Down Arrow** keys to select a rendering mode (Wireframe, Solid, Z-Buffer).
-*   **Apply**: Press `Enter` to activate the selected mode.
+*   Utilisez les flèches **Haut/Bas** pour naviguer dans la liste des modes (Wireframe, Solid, Z-Buffer) en haut à droite.
+*   Appuyez sur `Entrée` pour appliquer le mode sélectionné.
