@@ -187,6 +187,10 @@ class CurveView(object):
         if self.controller.transform_state["active"]: self.controller.cancel_transform()
         self.controller.import_object(self.width, self.height); self.update_display()
 
+    def on_export(self) -> None:
+        if self.controller.transform_state["active"]: self.controller.confirm_transform()
+        self.controller.export_object()
+
     def on_load_example(self, file_path: str) -> None:
         if self.controller.transform_state["active"]: self.controller.cancel_transform()
         self.controller.import_object_direct(self.width, self.height, file_path); self.update_display()
@@ -287,9 +291,11 @@ class CurveView(object):
         
         menu.add_command(label="New", command=self.on_new)
         menu.add_command(label="Import (.obj)", command=self.on_import)
+        menu.add_command(label="Export (.obj)", command=self.on_export)
 
         examples_menu = tkinter.Menu(menu, tearoff=0)
         menu.add_cascade(label="Examples", menu=examples_menu)
+
         
         scenes_dir = os.path.join(ASSETS_DIR, "scenes")
         if os.path.exists(scenes_dir):

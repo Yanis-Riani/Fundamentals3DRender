@@ -21,6 +21,50 @@ class Polyhedron:
         num_vertices = len(self.vertices)
         return vector3.Vector3(sum_x / num_vertices, sum_y / num_vertices, sum_z / num_vertices)
 
+    def save_to_obj(self, filename: str) -> None:
+        """Exports the polyhedron to a Wavefront .obj file."""
+        with open(filename, 'w') as f:
+            # Write header
+            f.write(f"# Exported by Fundamentals3DRender\n")
+            f.write(f"o {self.name if self.name else 'Object'}\n")
+            
+            # Write vertices
+            for v in self.vertices:
+                f.write(f"v {v[0]:.6f} {v[1]:.6f} {v[2]:.6f}\n")
+            
+            # Write texture coordinates
+            for vt in self.texture_coords:
+                f.write(f"vt {vt[0]:.6f} {vt[1]:.6f}\n")
+                
+            # Write normals
+            for vn in self.normals:
+                f.write(f"vn {vn[0]:.6f} {vn[1]:.6f} {vn[2]:.6f}\n")
+                
+            # Write faces
+            for i, tri in enumerate(self.triangle_indices):
+                f.write("f")
+                for j, v_idx in enumerate(tri):
+                    # OBJ indices are 1-based. Our internal indices seem to be 1-based (from parsing code).
+                    # 'f v/vt/vn' or 'f v//vn' or 'f v/vt' or 'f v'
+                    
+                    # Check if we have texture indices for this face
+                    vt_idx = ""
+                    if self.texture_indices and i < len(self.texture_indices) and len(self.texture_indices[i]) > j:
+                        vt_val = self.texture_indices[i][j]
+                        if vt_val != 0: # 0 often means no index in some parsers, but here checking >0 safer
+                             vt_idx = str(vt_val)
+                    
+                    # Check if we have normal indices for this face
+                    vn_idx = ""
+                    if self.normal_indices and i < len(self.normal_indices) and len(self.normal_indices[i]) > j:
+                         vn_idx = str(self.normal_indices[i][j])
+                    
+                    if vt_idx or vn_idx:
+                        f.write(f" {v_idx}/{vt_idx}/{vn_idx}")
+                    else:
+                        f.write(f" {v_idx}")
+                f.write("\n")
+
     def __init__(self) -> None:
         self.name: str = ""
         self.vertices: List[List[float]] = []
@@ -77,22 +121,46 @@ class SceneData:
                 poly = Polyhedron()
                 poly.object_index = object_idx
 
-                line1 = f.readline()
-                line2 = f.readline()
-                poly.name = line2.strip()
+                # Auto-detect format:
+                # Legacy format: First line is 0 or 1 (int), second line is name.
+                # Standard format: Starts with comments #, 'v', 'o', etc.
+                
+                start_pos = f.tell()
+                first_line = f.readline()
+                is_legacy = False
+                
+                try:
+                    val = int(first_line.strip())
+                    if val in [0, 1]:
+                        is_legacy = True
+                except ValueError:
+                    pass
+                
+                f.seek(start_pos) # Rewind to start
 
-                if int(line1) == 1:  # if polyhedron is texturable
-                    texture_file = tkinter.filedialog.askopenfilename(
-                        title="Associate a texture with the object?:", initialdir=os.path.join(ASSETS_DIR, "scenes"),
-                        filetypes=[("Textures", "*.jpg; *.png; *.bmp")]
-                    )
-                    if len(texture_file) > 0:
-                        poly.texture_on = True
-                        img = Image.open(texture_file)
-                        print(f"Texture dimensions {img.size}")
-                        mat = list(img.getdata())
-                        poly.texture_image = mat
-                        poly.texture_size.append(img.size)
+                if is_legacy:
+                    line1 = f.readline()
+                    line2 = f.readline()
+                    poly.name = line2.strip()
+
+                    if int(line1) == 1:  # if polyhedron is texturable
+                        texture_file = tkinter.filedialog.askopenfilename(
+                            title="Associate a texture with the object?:", initialdir=os.path.join(ASSETS_DIR, "scenes"),
+                            filetypes=[("Textures", "*.jpg; *.png; *.bmp")]
+                        )
+                        if len(texture_file) > 0:
+                            poly.texture_on = True
+                            img = Image.open(texture_file)
+                            print(f"Texture dimensions {img.size}")
+                            mat = list(img.getdata())
+                            poly.texture_image = mat
+                            poly.texture_size.append(img.size)
+                else:
+                    # Standard OBJ: Set default name from filename
+                    poly.name = os.path.basename(filename).split('.')[0]
+                    # We don't ask for texture here for standard OBJs to avoid flow interruption
+                    # unless we want to replicate behavior. But usually standard OBJs use MTL.
+                    pass
 
                 for line in f:
                     if line.startswith('v '):
@@ -139,6 +207,10 @@ class SceneData:
                                 krs = float(coeff_data[2])
                                 ns = int(coeff_data[3])
                                 coeffs = (ka, krd, krs, ns)
+                    
+                    elif line.startswith('o '):
+                        # Update name if explicit 'o' tag is found
+                        poly.name = line[2:].strip()
 
                     elif line.startswith('f'):
                         tri_indices = []

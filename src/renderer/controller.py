@@ -352,6 +352,16 @@ class CurveController(object):
         if os.path.exists(path):
             self._load_file(path, data, width, height)
 
+    def export_object(self) -> None:
+        if not self.loaded_objects:
+            return
+        fic = tkinter.filedialog.asksaveasfilename(title="Export OBJ", initialdir="", filetypes=[("Wavefront OBJ", "*.obj")], defaultextension=".obj")
+        if fic:
+            # We only support exporting the first object for now
+            obj = self.loaded_objects[0][0]
+            obj.save_to_obj(fic)
+
+
     def _load_file(self, fic: str, data: import_scene.SceneData, width: int, height: int) -> None:
         obj_idx = 0; obj_tex = data.add_object(fic, obj_idx); obj = self.scene.objects[obj_idx]; center = obj.get_center()
         for i in range(len(obj.vertices)):
