@@ -26,6 +26,8 @@ class Polyhedron:
         with open(filename, 'w') as f:
             # Write header
             f.write(f"# Exported by Fundamentals3DRender\n")
+            if self.texture_on:
+                f.write(f"# texture_enabled: true\n")
             f.write(f"o {self.name if self.name else 'Object'}\n")
             
             # Write vertices
@@ -158,9 +160,34 @@ class SceneData:
                 else:
                     # Standard OBJ: Set default name from filename
                     poly.name = os.path.basename(filename).split('.')[0]
-                    # We don't ask for texture here for standard OBJs to avoid flow interruption
-                    # unless we want to replicate behavior. But usually standard OBJs use MTL.
-                    pass
+                    
+                    # Check for texture hint in first few lines
+                    texture_hint_found = False
+                    # Read header lines (peek)
+                    header_lines = []
+                    curr_pos = f.tell()
+                    for _ in range(10): # Check first 10 lines max
+                        l = f.readline()
+                        if not l: break
+                        header_lines.append(l)
+                        if "texture_enabled: true" in l:
+                            texture_hint_found = True
+                            break
+                    f.seek(curr_pos) # Rewind to start of file (after legacy check)
+
+                    if texture_hint_found:
+                         texture_file = tkinter.filedialog.askopenfilename(
+                            title="Associate a texture with the object?:", initialdir=os.path.join(ASSETS_DIR, "scenes"),
+                            filetypes=[("Textures", "*.jpg; *.png; *.bmp")]
+                        )
+                         if len(texture_file) > 0:
+                            poly.texture_on = True
+                            img = Image.open(texture_file)
+                            print(f"Texture dimensions {img.size}")
+                            mat = list(img.getdata())
+                            poly.texture_image = mat
+                            poly.texture_size.append(img.size)
+
 
                 for line in f:
                     if line.startswith('v '):
@@ -224,9 +251,11 @@ class SceneData:
                                 if tex_coords_exist and len(face_data) > 1 and face_data[1]:
                                     tex_indices.append(int(face_data[1]))
                                 else:
-                                    poly.texture_on = False
-                                if len(face_data) > 2:
-                                    norm_indices.append(int(face_data[2]))
+                                    if not texture_hint_found:
+                                        poly.texture_on = False
+                                    else:
+                                        # Keep texture on, use 0 (or 1) as placeholder
+                                        tex_indices.append(1) # Default to 1 to avoid crash if list not empty
 
                         poly.triangle_indices.append(tri_indices)
                         poly.texture_indices.append(tex_indices)
